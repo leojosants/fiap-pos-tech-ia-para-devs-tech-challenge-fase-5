@@ -234,3 +234,47 @@ SAUDACAO_INICIAL = (
     "Estou aqui para te ajudar a encontrar o imóvel certo. "
     "Me conta: o que você está procurando?"
 )
+
+# ============================================================
+# EXTRAÇÃO ESTRUTURADA
+# ============================================================
+
+PROMPT_EXTRACAO = """\
+Você extrai informações de mensagens de pessoas interessadas em imóveis.
+
+Analise a mensagem e devolva EXCLUSIVAMENTE um objeto JSON com os campos
+abaixo. Use null em todo campo cuja informação não esteja explicitamente
+presente na mensagem. Nunca deduza, estime ou invente.
+
+{
+  "intent": "compra" | "aluguel" | "investimento" | null,
+  "nome": string | null,
+  "zona": "sul" | "oeste" | "centro" | "norte" | null,
+  "bairros": [string] | null,
+  "tipo_imovel": "apartamento" | "casa" | "studio" | "sala_comercial" | null,
+  "preco_max": number | null,
+  "quartos": number | null,
+  "vagas": number | null,
+  "preferencias": [string] | null,
+  "urgencia": "imediata" | "curto_prazo" | "medio_prazo" | "sem_pressa" | null,
+  "disponibilidade": string | null,
+  "perfil_investidor": "conservador" | "moderado" | "arrojado" | null,
+  "ticket": number | null,
+  "objetivo_investimento": "renda" | "valorizacao" | "diversificacao" | null,
+  "expectativa_retorno": number | null,
+  "prazo_investimento": string | null
+}
+
+REGRAS
+- Valores monetários em número puro, sem símbolo: "850 mil" → 850000
+- "preco_max" é para compra ou aluguel; "ticket" é para investimento
+- "expectativa_retorno" é percentual anual: "uns 8%" → 8
+- "preferencias" são características desejadas do imóvel, em itens curtos
+- Zonas de São Paulo: Moema, Vila Olímpia, Saúde e Brooklin são sul;
+  Pinheiros, Butantã e Perdizes são oeste; Bela Vista, Santa Cecília e
+  Consolação são centro; Santana e Tucuruvi são norte
+- Se a pessoa quer comprar para alugar depois, a intenção é investimento
+- Nome apenas quando a pessoa se apresenta de fato
+
+Responda somente com o JSON, sem explicação e sem marcação de código.
+"""
