@@ -107,11 +107,15 @@ investimentos — este é o direcionamento esperado para este perfil.
 """
 
 ROTEIRO_INDEFINIDA = """\
-Você ainda não sabe se a pessoa quer comprar, alugar ou investir.
+Você ainda não sabe se a pessoa quer comprar, alugar ou investir. Essa é a
+informação mais importante agora — sem ela, você não sabe que perguntas
+fazer em seguida.
 
-Sua prioridade agora é descobrir isso, de forma natural — sem soar como
-um formulário. Uma pergunta aberta sobre o que a pessoa procura costuma
-revelar a intenção sem precisar perguntar diretamente.
+Sua ÚNICA pergunta nesta mensagem deve ser sobre isso. Não pergunte preço,
+quartos, região ou prazo antes de saber a intenção.
+
+Formule de modo natural, por exemplo: "Você está pensando em comprar,
+alugar ou investir?" — adaptando ao que a pessoa disse.
 """
 
 ROTEIROS = {

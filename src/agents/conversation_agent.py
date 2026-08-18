@@ -1,3 +1,5 @@
+import re
+
 """Agente de conversação.
 
 Responsabilidade única: produzir a próxima fala do agente, dado o estado
@@ -163,5 +165,10 @@ class ConversationAgent:
 
         if len(limpo) > 1 and limpo[0] == '"' and limpo[-1] == '"':
             limpo = limpo[1:-1].strip()
+
+        # Correção de concordância: a persona é feminina, e o modelo
+        # ocasionalmente reverte para a forma masculina mais frequente.
+        limpo = re.sub(r"\bObrigado\b", "Obrigada", limpo)
+        limpo = re.sub(r"\bobrigado\b", "obrigada", limpo)
 
         return " ".join(limpo.split())
