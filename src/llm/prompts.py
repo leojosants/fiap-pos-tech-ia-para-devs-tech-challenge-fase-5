@@ -41,6 +41,8 @@ Outras regras:
 - Use o nome da pessoa quando souber, sem repetir a cada mensagem.
 - Nada de emojis em excesso — no máximo um, e só quando couber.
 - Sem jargão corporativo, sem "prezado", sem formalidade artificial.
+- Se perguntarem se você é uma IA, confirme com naturalidade: você é uma
+  assistente virtual da CasaLead. Não finja ser humana.
 
 O QUE VOCÊ NUNCA FAZ
 - Não invente imóveis, preços, endereços ou disponibilidade.
@@ -116,6 +118,11 @@ quartos, região ou prazo antes de saber a intenção.
 
 Formule de modo natural, por exemplo: "Você está pensando em comprar,
 alugar ou investir?" — adaptando ao que a pessoa disse.
+
+Se a pessoa já respondeu várias mensagens sem esclarecer a intenção, não
+insista. Assuma que é compra ou aluguel conforme o contexto, siga com a
+qualificação normalmente e confirme a intenção de passagem, sem transformar
+isso em pergunta bloqueante.
 """
 
 ROTEIROS = {
@@ -215,17 +222,14 @@ def _bloco_contexto_lead(lead: Lead) -> str:
 
 
 def montar_prompt_sistema(lead: Lead, imoveis_contexto: str = "") -> str:
-    """Compõe o prompt de sistema para o turno atual da conversa.
+    """Compõe o prompt de sistema para o turno atual da conversa."""
+    partes = [PERSONA_BASE, ROTEIROS[lead.intent]]
 
-    O prompt é reconstruído a cada turno para refletir o estado real da
-    qualificação — é isso que impede o agente de repetir perguntas já
-    respondidas.
-    """
-    partes = [
-        PERSONA_BASE,
-        ROTEIROS[lead.intent],
-        _bloco_contexto_lead(lead),
-    ]
+    # Enquanto a intenção não estiver definida, o único objetivo é
+    # descobri-la. Incluir a lista de slots pendentes competiria com essa
+    # instrução e faria o agente alternar entre os dois objetivos.
+    if lead.intent != Intent.INDEFINIDA:
+        partes.append(_bloco_contexto_lead(lead))
 
     if imoveis_contexto:
         partes.append(
@@ -287,6 +291,12 @@ REGRAS
 - Zonas de São Paulo: Moema, Vila Olímpia, Saúde e Brooklin são sul;
   Pinheiros, Butantã e Perdizes são oeste; Bela Vista, Santa Cecília e
   Consolação são centro; Santana e Tucuruvi são norte
+- EXCEÇÃO à regra de não deduzir: o campo "intent" pode ser inferido do
+  contexto. Quem fala em morar, se mudar, quartos para a família ou
+  orçamento total do imóvel está em compra ou aluguel; se menciona
+  financiamento ou "meu próprio", é compra; se fala em renda, retorno ou
+  rentabilidade, é investimento. Na dúvida entre compra e aluguel, prefira
+  compra quando o valor citado for alto (acima de R$ 100 mil).
 - Se a pessoa quer comprar para alugar depois, a intenção é investimento
 - Nome apenas quando a pessoa se apresenta de fato
 

@@ -163,6 +163,10 @@ class GroqClient:
                     self._settings.max_tentativas,
                     ultimo_erro,
                 )
+                # Erros 4xx indicam requisição inválida ou conteúdo
+                # recusado pelo modelo — retentar não muda o resultado.
+                if "400" in ultimo_erro or "BadRequest" in ultimo_erro:
+                    break
                 if tentativa < self._settings.max_tentativas:
                     time.sleep(0.8 * tentativa)
 

@@ -201,6 +201,12 @@ class Orchestrator:
             historico = self._conversas.historico_para_llm(conversation_id)
             resposta = self._conversacao.responder(lead, texto, historico)
 
+        # O motor determinístico pode inferir a intenção durante a geração
+        # da resposta, após o lead já ter sido gravado. Regravamos para que
+        # essa alteração não se perca entre reruns da interface.
+        self._atualizar_status(lead)
+        self._leads.atualizar(lead)
+
         # [5] Persistir a saída
         self._conversas.adicionar_mensagem(
             Message(
@@ -301,7 +307,10 @@ class Orchestrator:
             return
 
         completude = lead.completude()
-        if completude >= 1.0:
+        # Um lead sem intenção definida não está qualificado, ainda que
+        # todos os demais campos estejam preenchidos: sem saber se quer
+        # comprar, alugar ou investir, o corretor não sabe como abordá-lo.
+        if completude >= 1.0 and lead.intent != Intent.INDEFINIDA:
             lead.status = LeadStatus.QUALIFICADO
         elif completude > 0 or lead.intent != Intent.INDEFINIDA:
             lead.status = LeadStatus.EM_QUALIFICACAO

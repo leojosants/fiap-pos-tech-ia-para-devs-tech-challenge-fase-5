@@ -1,5 +1,3 @@
-from src.core.enums import Intent, Urgency, Zone
-
 """Motor conversacional determinístico do CasaLead.
 
 Conduz a qualificação sem depender de LLM, usando detecção por padrões
@@ -20,7 +18,7 @@ substituto do LLM.
 import random
 import re
 
-from src.core.enums import Intent, Zone
+from src.core.enums import Intent, Urgency, Zone
 from src.core.models import Lead
 
 # ============================================================
@@ -67,17 +65,36 @@ _PADROES_URGENCIA = {
 }
 
 
+_VERBOS_DECLARATIVOS = re.compile(
+    r"(quer[oe]mos?|procur[oa]\w*|pens[oa]\w*|gostar[íi]amos?|gostaria|"
+    r"pretend\w+|estamos?|estou|vou|vamos|preciso|precisamos)"
+)
+
+
 def detectar_intencao(texto: str) -> Intent:
     """Identifica a intenção do lead por correspondência de padrões.
 
-    A ordem de verificação importa: investimento é checado primeiro
-    porque 'quero comprar um imóvel para investir' contém ambos os
-    sinais, e o objetivo real é investimento.
+    Ocorrências precedidas de verbo declarativo ("queremos comprar") têm
+    precedência sobre menções contextuais ("contrato de aluguel vence"),
+    pois indicam o que o lead deseja, não a situação em que se encontra.
+    Sem declaração explícita, vence a última ocorrência no texto.
     """
     t = texto.lower()
+    declaradas: list[tuple[int, Intent]] = []
+    mencionadas: list[tuple[int, Intent]] = []
+
     for intent, padrao in _PADROES_INTENCAO.items():
-        if re.search(padrao, t):
-            return intent
+        for m in re.finditer(padrao, t):
+            contexto = t[max(0, m.start() - 25):m.start()]
+            if _VERBOS_DECLARATIVOS.search(contexto):
+                declaradas.append((m.start(), intent))
+            else:
+                mencionadas.append((m.start(), intent))
+
+    if declaradas:
+        return max(declaradas, key=lambda x: x[0])[1]
+    if mencionadas:
+        return max(mencionadas, key=lambda x: x[0])[1]
     return Intent.INDEFINIDA
 
 
@@ -149,31 +166,52 @@ def detectar_urgencia(texto: str) -> str | None:
             return valor
     return None
 
-_PADRAO_DISPONIBILIDADE = (
-    r"\b(segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo|"
+# Termos que indicam disponibilidade só quando acompanhados de contexto
+# de agendamento. "Hoje moramos num studio" menciona tempo, mas não é
+# disponibilidade; "posso hoje à tarde" é.
+_PADRAO_DIA_HORARIO = (
+    r"(segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo|"
     r"amanh[ãa]|hoje|fim de semana|manh[ãa]|tarde|noite|"
-    r"\d{1,2}h|\d{1,2}:\d{2})\b"
+    r"\d{1,2}\s*h\b|\d{1,2}:\d{2})"
+)
+
+_CONTEXTO_DISPONIBILIDADE = (
+    r"(posso|pode|podemos|dispon[íi]vel|disponibilidade|livre|"
+    r"marcar|agendar|visitar|visita|conversar|reuni[ãa]o|"
+    r"melhor (dia|hor[áa]rio)|que tal|prefiro|consigo|encaixa)"
 )
 
 
 def detectar_disponibilidade(texto: str) -> str:
     """Captura menção a dia ou horário de disponibilidade.
 
-    Retorna o trecho original informado pelo lead, sem normalizar — o
-    corretor humano interpreta melhor 'sábado de manhã' do que qualquer
-    estrutura que tentássemos derivar.
+    Exige que o termo temporal apareça junto de um verbo ou expressão de
+    agendamento na mesma frase. Sem isso, "hoje moramos num studio" seria
+    interpretado como disponibilidade — a palavra é a mesma, o uso não.
     """
-    if re.search(_PADRAO_DISPONIBILIDADE, texto, re.IGNORECASE):
-        return texto.strip()
+    for frase in re.split(r"[.!?\n]", texto):
+        tem_tempo = re.search(_PADRAO_DIA_HORARIO, frase, re.IGNORECASE)
+        tem_contexto = re.search(_CONTEXTO_DISPONIBILIDADE, frase, re.IGNORECASE)
+        if tem_tempo and tem_contexto:
+            trecho = frase.strip()
+            if len(trecho) <= 120:
+                return trecho
     return ""
 
 
 _NAO_SAO_NOMES = {
+    # Saudações e conectivos
     "oi", "ola", "olá", "bom", "boa", "eu", "sim", "nao", "não",
     "quero", "procuro", "preciso", "estou", "tenho", "gostaria",
     "meu", "minha", "obrigado", "obrigada", "certo", "ok", "legal",
+    # Perfis de investidor — aparecem em "sou conservador"
+    "conservador", "conservadora", "moderado", "moderada",
+    "arrojado", "arrojada",
+    # Papéis e estados — aparecem em "sou investidor", "sou casado"
     "investidor", "investidora", "corretor", "corretora",
-    "interessado", "interessada", "casado", "casada", "solteiro",
+    "interessado", "interessada", "comprador", "compradora",
+    "casado", "casada", "solteiro", "solteira",
+    "aposentado", "aposentada", "cliente", "pessoa", "alguem", "alguém",
 }
 
 
@@ -298,6 +336,7 @@ class DemoEngine:
 
     def __init__(self, seed: int | None = None) -> None:
         self._rng = random.Random(seed)
+        self._tentativas_intencao = 0
 
     def aplicar_ao_lead(self, lead: Lead, texto: str) -> dict:
         """Extrai informações da mensagem e atualiza o lead.
@@ -370,7 +409,16 @@ class DemoEngine:
         reconhecimento = _montar_reconhecimento(capturados, self._rng)
 
         if lead.intent == Intent.INDEFINIDA:
-            return f"{reconhecimento} {self._rng.choice(_PERGUNTA_INTENCAO)}"
+            self._tentativas_intencao += 1
+
+            # Saída de emergência: após duas perguntas sem resposta
+            # explícita, assume compra a partir dos sinais já coletados.
+            # Insistir seria pior que inferir — o lead já demonstrou o
+            # que procura, ainda que sem usar o verbo esperado.
+            if self._tentativas_intencao > 2 and self._tem_sinais_de_moradia(lead):
+                lead.intent = Intent.COMPRA
+            else:
+                return f"{reconhecimento} {self._rng.choice(_PERGUNTA_INTENCAO)}"
 
         pendentes = [s for s, ok in lead.slots_status().items() if not ok]
         if not pendentes:
@@ -378,3 +426,18 @@ class DemoEngine:
 
         pergunta = self._rng.choice(_PERGUNTAS[pendentes[0]])
         return f"{reconhecimento} {pergunta}"
+
+    @staticmethod
+    def _tem_sinais_de_moradia(lead: Lead) -> bool:
+        """Indica se o lead já forneceu dados típicos de compra ou aluguel.
+
+        Região, quantidade de quartos ou faixa de preço informados, sem
+        menção a renda ou rentabilidade, caracterizam busca por moradia.
+        """
+        sinais = (
+            lead.zona_interesse is not None,
+            lead.quartos_desejados is not None,
+            lead.preco_max is not None,
+        )
+        return sum(sinais) >= 2
+    

@@ -76,10 +76,12 @@ class QualificationAgent:
             if nome:
                 capturado["nome"] = nome
 
-        if lead.intent == Intent.INDEFINIDA:
-            intent = det.detectar_intencao(texto)
-            if intent != Intent.INDEFINIDA:
-                capturado["intent"] = intent
+        # A intenção é o único slot que aceita correção explícita: se o
+        # lead disser "na verdade quero alugar", a declaração direta
+        # prevalece sobre a inferência anterior.
+        intent = det.detectar_intencao(texto)
+        if intent != Intent.INDEFINIDA and intent != lead.intent:
+            capturado["intent"] = intent
 
         valor = det.detectar_valor(texto)
         intent_efetiva = capturado.get("intent", lead.intent)
@@ -147,7 +149,9 @@ class QualificationAgent:
         mapa: dict = {}
 
         if not lead.nome and dados.get("nome"):
-            mapa["nome"] = str(dados["nome"]).strip()
+            candidato = str(dados["nome"]).strip()
+            if candidato.lower() not in det._NAO_SAO_NOMES and len(candidato) >= 3:
+                mapa["nome"] = candidato
 
         if lead.intent == Intent.INDEFINIDA:
             intent = _enum(dados.get("intent"), Intent)
@@ -158,7 +162,9 @@ class QualificationAgent:
 
         if intent_efetiva == Intent.INVESTIMENTO:
             if lead.ticket_disponivel is None and dados.get("ticket"):
-                mapa["ticket_disponivel"] = float(dados["ticket"])
+                valor = float(dados["ticket"])
+                if valor >= 10_000:
+                    mapa["ticket_disponivel"] = valor
             if lead.perfil_investidor == InvestorProfile.NAO_INFORMADO:
                 perfil = _enum(dados.get("perfil_investidor"), InvestorProfile)
                 if perfil:
@@ -173,7 +179,12 @@ class QualificationAgent:
                 mapa["prazo_investimento"] = str(dados["prazo_investimento"])
         else:
             if lead.preco_max is None and dados.get("preco_max"):
-                mapa["preco_max"] = float(dados["preco_max"])
+                valor = float(dados["preco_max"])
+                # Piso de plausibilidade: nenhum imóvel em São Paulo custa
+                # menos de R$ 500 (aluguel) — valores abaixo disso indicam
+                # extração equivocada ou entrada não-séria.
+                if valor >= 500:
+                    mapa["preco_max"] = valor
             if lead.zona_interesse is None:
                 zona = _enum(dados.get("zona"), Zone)
                 if zona:

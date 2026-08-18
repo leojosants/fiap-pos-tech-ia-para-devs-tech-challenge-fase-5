@@ -6,6 +6,8 @@ FIAP | Pós Tech em IA para Devs — Hackathon.
 
 import streamlit as st
 
+from src.ui import page_chat
+
 st.set_page_config(
     page_title="CasaLead — Agente SDR Imobiliário",
     page_icon="🏠",
@@ -15,26 +17,7 @@ st.set_page_config(
 
 
 def main() -> None:
-    """Renderiza a aplicação."""
-    st.title("🏠 CasaLead")
-    st.caption("Agente SDR Imobiliário com IA Generativa")
-
-    st.success("Ambiente configurado com sucesso — Etapa 0 concluída.")
-
-    st.markdown(
-        """
-        **Próximas etapas:**
-
-        1. Base simulada de imóveis + camada de persistência
-        2. Motor conversacional (Groq + modo demonstrativo)
-        3. Identificação de intenção e qualificação
-        4. Recomendação de imóveis (RAG)
-        5. Classificação e priorização de leads
-        6. Agendamento, follow-up e resumo para o corretor
-        7. Dashboard e observabilidade
-        8. Testes, documentação e deploy
-        """
-    )
+    page_chat.renderizar()
 
 
 if __name__ == "__main__":
