@@ -21,9 +21,15 @@ um resumo estruturado para o corretor humano.
   - [🎯 O Problema](#-o-problema)
   - [💡 A Solução](#-a-solução)
   - [✨ Funcionalidades](#-funcionalidades)
-  - [🎬 Demonstração](#-demonstração)
   - [🏗️ Arquitetura](#️-arquitetura)
+    - [Responsabilidade de cada componente](#responsabilidade-de-cada-componente)
+    - [Degradação em dois níveis](#degradação-em-dois-níveis)
   - [💬 Fluxo da Conversa](#-fluxo-da-conversa)
+    - [Critérios de qualificação](#critérios-de-qualificação)
+  - [🎬 Exemplos de Uso](#-exemplos-de-uso)
+    - [Compra — linguagem direta](#compra--linguagem-direta)
+    - [Linguagem natural aberta](#linguagem-natural-aberta)
+    - [Investimento](#investimento)
   - [🛠️ Tecnologias](#️-tecnologias)
   - [📁 Estrutura de Diretórios](#-estrutura-de-diretórios)
   - [⚙️ Como Executar Localmente](#️-como-executar-localmente)
@@ -31,11 +37,12 @@ um resumo estruturado para o corretor humano.
     - [Passo 1 — Clonar o repositório](#passo-1--clonar-o-repositório)
     - [Passo 2 — Configurar variáveis de ambiente](#passo-2--configurar-variáveis-de-ambiente)
     - [Passo 3 — Instalar dependências](#passo-3--instalar-dependências)
-    - [Passo 4 — Executar](#passo-4--executar)
+    - [Passo 4 — Gerar a base de imóveis](#passo-4--gerar-a-base-de-imóveis)
+    - [Passo 5 — Executar](#passo-5--executar)
+    - [Executar sem chave de API](#executar-sem-chave-de-api)
   - [🔐 Variáveis de Ambiente](#-variáveis-de-ambiente)
   - [🧪 Testes](#-testes)
-  - [☁️ Deploy](#️-deploy)
-  - [📊 Critérios de Qualificação](#-critérios-de-qualificação)
+  - [📐 Decisões Técnicas](#-decisões-técnicas)
   - [⚠️ Limitações Conhecidas](#️-limitações-conhecidas)
   - [🚀 Melhorias Futuras](#-melhorias-futuras)
   - [🎓 Autor](#-autor)
@@ -68,35 +75,165 @@ etapa menos qualificada do funil.
 
 | # | Funcionalidade | Status |
 | --- | --- | --- |
-| 1 | Atendimento conversacional humanizado | 🔜 |
-| 2 | Identificação de intenção (compra / aluguel / investimento) | 🔜 |
-| 3 | Qualificação e coleta estruturada de informações | 🔜 |
-| 4 | Memória e persistência do contexto conversacional | 🔜 |
-| 5 | Consulta à base simulada de imóveis (RAG) | 🔜 |
-| 6 | Classificação e priorização de leads | 🔜 |
-| 7 | Agendamento de reuniões e visitas | 🔜 |
-| 8 | Follow-up automático de leads inativos | 🔜 |
-| 9 | Resumo inteligente para o corretor | 🔜 |
-| 10 | Dashboard de acompanhamento | 🔜 |
-| 11 | Observabilidade e métricas de conversão | 🔜 |
-
----
-
-## 🎬 Demonstração
-
-_A ser preenchido — aplicação publicada e exemplos de conversa._
+| 1 | Atendimento conversacional humanizado | ✅ |
+| 2 | Identificação de intenção (compra / aluguel / investimento) | ✅ |
+| 3 | Qualificação e coleta estruturada de informações | ✅ |
+| 4 | Memória e persistência do contexto conversacional | ✅ |
+| 5 | Modo demonstrativo sem dependência de API | ✅ |
+| 6 | Observabilidade (eventos, tokens, latência) | ✅ |
+| 7 | Consulta à base simulada de imóveis (RAG) | 🔜 |
+| 8 | Classificação e priorização de leads | 🔜 |
+| 9 | Agendamento de reuniões e visitas | 🔜 |
+| 10 | Follow-up automático de leads inativos | 🔜 |
+| 11 | Resumo inteligente para o corretor | 🔜 |
+| 12 | Dashboard de acompanhamento | 🔜 |
 
 ---
 
 ## 🏗️ Arquitetura
 
-_A ser preenchido — diagrama e descrição dos componentes._
+A solução é organizada em camadas com responsabilidades estritas. Nenhuma
+camada superior conhece os detalhes da inferior.
+
+┌─────────────────────────────────────────────────────┐
+│ INTERFACE (Streamlit) │
+│ page_chat · qualification_panel · state │
+└────────────────────┬────────────────────────────────┘
+│ ResultadoTurno
+┌────────────────────▼────────────────────────────────┐
+│ ORQUESTRADOR │
+│ Única porta de entrada do domínio. │
+│ Coordena o turno e persiste o resultado. │
+└──┬──────────────────────────────┬───────────────────┘
+│ │
+┌──▼───────────────────┐ ┌──────▼──────────────────┐
+│ AGENTES │ │ PERSISTÊNCIA │
+│ ├ qualification │ │ ├ lead_repository │
+│ ├ conversation │ │ ├ property_repository │
+│ └ scheduling 🔜 │ │ └ conversation_repo │
+└──┬───────────────────┘ └──────┬──────────────────┘
+│ │
+┌──▼───────────────────┐ ┌──────▼──────────────────┐
+│ CAMADA DE IA │ │ SQLite │
+│ ├ groq_client │ │ 7 tabelas │
+│ ├ prompts │ │ + seed versionado │
+│ └ demo_engine │ └─────────────────────────┘
+└──────────────────────┘
+
+### Responsabilidade de cada componente
+
+| Componente | Responsabilidade |
+| --- | --- |
+| `ui/` | Renderização e estado de sessão. Não contém regra de negócio |
+| `agents/orchestrator` | Coordena o turno: persiste entrada, qualifica, gera resposta, persiste saída |
+| `agents/qualification_agent` | Extrai intenção e slots — regex + LLM com verificação cruzada |
+| `agents/conversation_agent` | Produz a fala do agente, com degradação automática para o modo determinístico |
+| `llm/groq_client` | Comunicação com a API, retry, timeout e coleta de métricas |
+| `llm/prompts` | Persona, roteiros por intenção e prompt de extração |
+| `llm/demo_engine` | Motor determinístico e detectores por padrão |
+| `persistence/` | Acesso a dados. Nenhum módulo acima conhece SQL |
+| `core/` | Modelos de domínio, enums e configuração |
+
+### Degradação em dois níveis
+
+O sistema mantém-se operante mesmo sem acesso ao provedor de LLM:
+
+1. **Sem chave de API** → opera integralmente no motor determinístico
+2. **Chave presente, chamada falha** → degrada para o motor no turno afetado e volta ao LLM no seguinte
 
 ---
 
 ## 💬 Fluxo da Conversa
 
-_A ser preenchido._
+Entrada do lead
+↓
+Persistência da mensagem ──────→ tabela messages
+↓
+Qualificação
+├ extração por padrões (regex)
+├ extração por LLM (quando necessário)
+└ verificação cruzada em campos numéricos
+↓
+Atualização do lead ───────────→ tabela leads + events
+↓
+Confirmação de intenção ambígua?
+├ sim → pergunta determinística
+└ não → geração pelo LLM
+↓
+Persistência da resposta ──────→ tabela messages
+↓
+ResultadoTurno ────────────────→ interface
+
+### Critérios de qualificação
+
+O agente considera o lead qualificado quando reúne todos os slots da
+intenção identificada:
+
+| Compra e aluguel | Investimento |
+| --- | --- |
+| Região de interesse | Perfil de investidor |
+| Faixa de preço | Ticket disponível |
+| Quantidade de quartos | Objetivo do investimento |
+| Prazo | Expectativa de retorno |
+| Disponibilidade para reunião | Prazo do investimento |
+
+Um lead com todos os slots preenchidos **mas sem intenção definida** não
+é considerado qualificado — sem saber se ele quer comprar, alugar ou
+investir, o corretor não sabe como abordá-lo.
+
+---
+
+## 🎬 Exemplos de Uso
+
+### Compra — linguagem direta
+
+LEAD: Oi, procuro apartamento na zona sul
+SOFIA: Entendi, você busca um apartamento na zona sul.
+Você está pensando em comprar ou alugar?
+
+LEAD: Meu nome é Marcos, até 850 mil
+SOFIA: Entendi, Marcos. Só para eu te ajudar direito:
+você está pensando em comprar, alugar ou investir?
+
+LEAD: 2 quartos e uma vaga
+SOFIA: Entendi, 2 quartos e uma vaga. Qual é o prazo que você
+tem em mente para se mudar ou fechar a compra?
+
+LEAD: Posso sábado de manhã
+SOFIA: Obrigada, Marcos! Você procura apartamento na zona sul,
+até R$ 850.000, com 2 quartos, 1 vaga, e quer se mudar
+o quanto antes. Um corretor vai entrar em contato em breve.
+
+### Linguagem natural aberta
+
+De um relato de 340 palavras contendo distratores numéricos ("sete anos",
+"nove anos", "uma hora no trânsito") e menções geográficas irrelevantes
+("região central", "Paulista"), o agente extraiu corretamente:
+
+| Slot | Valor extraído |
+| --- | --- |
+| Intenção | Compra *(o texto continha três menções contextuais a "aluguel")* |
+| Região | Oeste |
+| Orçamento | R$ 1.200.000 *(informado por extenso: "um milhão e duzentos mil")* |
+| Quartos | 3 |
+| Prazo | Imediata *(inferido de "contrato vence em dois meses")* |
+| Preferências | Aceita pet, espaço para escritório |
+
+### Investimento
+
+LEAD: Quero investir em imóveis para renda
+SOFIA: Entendi, foco em renda mensal. Já investe em imóveis
+ou é a primeira vez?
+
+LEAD: Já invisto, sou conservador
+SOFIA: Ótimo! Já tem experiência no mercado. Quanto você
+pretende investir nesse próximo imóvel?
+
+LEAD: Penso em investir nos próximos meses
+SOFIA: Perfeito! Você já investe em imóveis, tem R$ 600.000
+disponíveis, busca renda mensal com retorno de 7% ao ano
+e pretende investir nos próximos meses. Vou encaminhar
+seu perfil ao nosso especialista em investimentos.
 
 ---
 
@@ -107,14 +244,34 @@ _A ser preenchido._
 | Linguagem | Python 3.12.9 | Ecossistema de IA e requisito do curso |
 | Dependências | [`uv`](https://docs.astral.sh/uv/) | Resolução determinística via lockfile |
 | Interface | Streamlit | Chat e dashboard com baixo custo de implementação |
-| Persistência | SQLite | Zero configuração; camada de repositório abstraída |
-| LLM | Groq API | Inferência rápida, free tier, sem custo operacional |
+| Persistência | SQLite (`sqlite3` puro) | Zero configuração; camada de repositório abstraída |
+| LLM — conversa | Groq · `openai/gpt-oss-20b` | Latência baixa para o turno a turno |
+| LLM — raciocínio | Groq · `openai/gpt-oss-120b` | Maior capacidade para extração e sumarização |
+| Testes | `pytest` | Cobertura da lógica determinística |
+
+O uso de LangChain foi avaliado e descartado: a orquestração de três
+agentes com fluxo determinístico não justifica o overhead de abstração.
+Ver [decisões técnicas](docs/decisoes_tecnicas.md).
 
 ---
 
 ## 📁 Estrutura de Diretórios
 
-_A ser preenchido ao final da implementação._
+├── data/
+│ ├── seed/properties.json # base de 60 imóveis (versionada)
+│ └── runtime/ # banco SQLite (gerado, não versionado)
+├── docs/
+│ └── decisoes_tecnicas.md # decisões, bugs e limitações
+├── scripts/
+│ └── generate_properties.py # gerador determinístico da base
+├── src/
+│ ├── core/ # modelos, enums, configuração
+│ ├── persistence/ # repositórios e schema
+│ ├── llm/ # cliente Groq, prompts, motor demo
+│ ├── agents/ # qualificação, conversação, orquestrador
+│ └── ui/ # páginas e componentes Streamlit
+├── tests/
+└── main.py # ponto de entrada
 
 ---
 
@@ -124,7 +281,7 @@ _A ser preenchido ao final da implementação._
 
 - Python 3.12.9
 - [`uv`](https://docs.astral.sh/uv/) instalado
-- Chave gratuita da [Groq API](https://console.groq.com) _(opcional — há modo demonstrativo)_
+- Chave gratuita da [Groq API](https://console.groq.com) *(opcional — há modo demonstrativo)*
 
 ### Passo 1 — Clonar o repositório
 
@@ -137,6 +294,7 @@ cd fiap-pos-tech-ia-para-devs-tech-challenge-fase-5
 
 ```bash
 cp .env.example .env
+# Edite o .env e preencha GROQ_API_KEY (opcional)
 ```
 
 ### Passo 3 — Instalar dependências
@@ -145,7 +303,13 @@ cp .env.example .env
 uv sync
 ```
 
-### Passo 4 — Executar
+### Passo 4 — Gerar a base de imóveis
+
+```bash
+uv run python -m scripts.generate_properties
+```
+
+### Passo 5 — Executar
 
 ```bash
 uv run streamlit run main.py
@@ -153,18 +317,31 @@ uv run streamlit run main.py
 
 A aplicação abre em `http://localhost:8501`.
 
+### Executar sem chave de API
+
+```bash
+# Linux/macOS/Git Bash
+DEMO_MODE=true uv run streamlit run main.py
+
+# PowerShell
+$env:DEMO_MODE="true"; uv run streamlit run main.py
+```
+
 ---
 
 ## 🔐 Variáveis de Ambiente
 
 | Variável | Obrigatória | Descrição |
 | --- | --- | --- |
-| `GROQ_API_KEY` | Não | Chave da Groq API. Ausente, o sistema opera em modo demonstrativo |
-| `GROQ_MODEL_FAST` | Não | Modelo para tarefas de baixa latência |
-| `GROQ_MODEL_SMART` | Não | Modelo para raciocínio e sumarização |
+| `GROQ_API_KEY` | Não | Ausente, o sistema opera em modo demonstrativo |
+| `GROQ_MODEL_FAST` | Não | Modelo da conversa (padrão: `openai/gpt-oss-20b`) |
+| `GROQ_MODEL_SMART` | Não | Modelo de raciocínio (padrão: `openai/gpt-oss-120b`) |
 | `DEMO_MODE` | Não | `true` força o motor determinístico |
 | `DATABASE_PATH` | Não | Caminho do banco SQLite |
 | `LOG_LEVEL` | Não | Nível de log da aplicação |
+
+A chave de API nunca é exposta em log ou interface — o sistema informa
+apenas se ela está configurada.
 
 ---
 
@@ -176,27 +353,44 @@ uv run pytest
 
 ---
 
-## ☁️ Deploy
+## 📐 Decisões Técnicas
 
-_A ser preenchido._
-
----
-
-## 📊 Critérios de Qualificação
-
-_A ser preenchido._
+Todas as decisões de arquitetura e implementação, com as alternativas
+consideradas e suas justificativas, estão registradas em
+**[docs/decisoes_tecnicas.md](docs/decisoes_tecnicas.md)** — incluindo os
+bugs encontrados durante o desenvolvimento e os testes de segurança
+realizados.
 
 ---
 
 ## ⚠️ Limitações Conhecidas
 
-_A ser preenchido._
+Principais limitações desta prova de conceito:
+
+- **Persistência em ambiente efêmero** — no Streamlit Cloud, o banco é
+  recriado a partir do seed a cada reciclagem do container.
+- **Compreensão limitada no modo demonstrativo** — o motor determinístico
+  reconhece padrões conhecidos, mas não compreende linguagem natural.
+- **Sem validação da saída do modelo** — não há verificação automática de
+  que o agente respeitou as regras do prompt.
+- **Slots imutáveis** — apenas a intenção admite correção pelo lead; os
+  demais campos, uma vez preenchidos, não são sobrescritos.
+
+A lista completa, com 17 itens e o módulo correspondente, está em
+[docs/decisoes_tecnicas.md](docs/decisoes_tecnicas.md).
 
 ---
 
 ## 🚀 Melhorias Futuras
 
-_A ser preenchido._
+- Integração com WhatsApp Business API
+- Integração com CRM (HubSpot, Pipedrive)
+- Circuit breaker no cliente de LLM
+- Streaming de resposta token a token
+- Migração para Postgres/Supabase — a camada de repositório já abstrai o backend
+- Política de retenção de dados conforme LGPD
+- Correção de slots já preenchidos por declaração do lead
+- Modelo local via Ollama como alternativa de fallback
 
 ---
 
@@ -211,3 +405,4 @@ _A ser preenchido._
 
 > Prova de conceito acadêmica. Os dados de imóveis e leads são
 > sintéticos e não representam ofertas reais.
+MARKDOWN_EOF
