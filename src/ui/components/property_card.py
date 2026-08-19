@@ -77,7 +77,7 @@ def _renderizar_card(rec: Recomendacao, indice: int) -> None:
         if rec.motivos:
             for motivo in rec.motivos:
                 if motivo.startswith("⚠️"):
-                    st.caption(f":orange[{motivo}]")
+                    st.markdown(f":orange-badge[{motivo}]")
                 else:
                     st.caption(f"✓ {motivo}")
 

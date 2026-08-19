@@ -131,6 +131,11 @@ class GroqClient:
             "messages": mensagens,
             "temperature": temperatura,
             "max_tokens": max_tokens,
+            # O modelo ocasionalmente tenta emitir uma chamada de
+            # ferramenta mesmo sem tools declaradas, o que a API rejeita
+            # com erro 400. Declarar tool_choice explicitamente evita
+            # esse comportamento.
+            "tool_choice": "none",
         }
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
@@ -165,7 +170,11 @@ class GroqClient:
                 )
                 # Erros 4xx indicam requisição inválida ou conteúdo
                 # recusado pelo modelo — retentar não muda o resultado.
-                if "400" in ultimo_erro or "BadRequest" in ultimo_erro:
+                # Exceção: 'tool_use_failed' é um desvio momentâneo de
+                # comportamento do modelo, e a retentativa costuma
+                # produzir uma resposta válida.
+                erro_transitorio = "tool_use_failed" in ultimo_erro
+                if not erro_transitorio and ("400" in ultimo_erro or "BadRequest" in ultimo_erro):
                     break
                 if tentativa < self._settings.max_tentativas:
                     time.sleep(0.8 * tentativa)
