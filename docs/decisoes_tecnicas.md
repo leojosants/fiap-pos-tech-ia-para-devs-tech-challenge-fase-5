@@ -70,6 +70,29 @@ consideradas e justificativas. Base para o relatório técnico final.
 | Status derivado da completude | Status decidido pelo LLM | Regra de negócio auditável; dois leads idênticos não podem receber status diferentes |
 | Resultado explícito em vez de exceção | `try/except` no chamador | Impossível ignorar a falha por acidente |
 
+## 6b. Recomendação de imóveis
+
+| Decisão | Alternativa descartada | Justificativa |
+| --- | --- | --- |
+| TF-IDF (`scikit-learn`) | Embeddings densos (`sentence-transformers`) | Compatibilidade com o deploy (sem PyTorch, ~2GB), explicabilidade (é possível mostrar quais termos casaram) e adequação à escala da base |
+| TF-IDF | Embeddings via API | A Groq não oferece endpoint de embeddings; outro provedor violaria a restrição de fornecedor |
+| Dicionário de expansão de sinônimos | Aceitar a limitação léxica | Aproxima o vocabulário do lead ao da base: "arejado" passa a casar com "ensolarado" |
+| Expansão aplicada na indexação e na consulta | Só na consulta | Casamento parcial não produziria similaridade; ambos os lados precisam do mesmo espaço vocabular |
+| Remoção de acentuação | Manter o texto original | Leads digitam "saude" e "butanta"; sem normalização, seriam termos distintos e a busca falharia silenciosamente |
+| N-gramas de 1 e 2 palavras | Só unigramas | "área verde" e "andar alto" carregam significado que os termos isolados perdem |
+| "apartamento" e "casa" como stopwords | Manter no vocabulário | 38 dos 60 imóveis são apartamentos: o termo quase não discrimina e produziria resultados aleatórios |
+| Filtro SQL antes da busca semântica | Busca semântica primeiro | Critérios estruturados são não-negociáveis; um imóvel semanticamente ideal fora do orçamento não é recomendação |
+| Preferências estruturais viram filtro | Busca textual para tudo | "Espaço para escritório" significa um cômodo a mais — é filtro, não similaridade de texto |
+| Relaxamento progressivo em 6 níveis | Nível único ou nenhum | Lead sem resultado abandona a conversa; lead com resultado próximo negocia |
+| Preferências como desejáveis, não requisitos | Filtro obrigatório | Restringiam o resultado a 1 imóvel; os alertas sinalizam o que não é atendido |
+| Studios excluídos quando quartos não informados | Incluir sempre | Studios são os mais baratos e dominariam qualquer busca sem esse critério |
+| Recomendação recalculada a cada turno | Armazenar o resultado | Os critérios do lead evoluem durante a conversa; resultados desatualizados seriam piores que nenhum |
+| Cards visuais + menção textual | Só texto ou só cards | A conversa mantém naturalidade; o card entrega dado estruturado que não se absorve em prosa |
+| Dois renderizadores de card (moradia e investimento) | Card único | Quem compra olha quartos e área; quem investe olha rentabilidade e retorno |
+| Cabeçalho dos cards renderizado pela UI | Gerado pelo agente | O modelo cumpria a instrução de forma inconsistente entre turnos; o que pode ser determinístico não depende de comportamento probabilístico |
+| Aluguel projetado a partir da rentabilidade | Exibir "—" | O investidor precisa saber o rendimento mensal; o rótulo distingue projeção de valor anunciado |
+| Termos que explicam o match expostos na interface | Só o score numérico | Torna a recomendação auditável: é a vantagem concreta do TF-IDF sobre embeddings |
+
 ## 7. Interface
 
 | Decisão | Alternativa descartada | Justificativa |
@@ -104,6 +127,13 @@ no processo.
 | 14 | "Orçamento: R$ 10" em entrada não-séria | LLM extraiu obedientemente | Piso de plausibilidade (R$ 500 / R$ 10 mil) |
 | 15 | Intenção do modo demo perdida entre reruns | Motor altera o lead após a gravação | Segunda gravação no orquestrador |
 | 16 | "queremos comprar" classificado como aluguel | Regex priorizava a primeira ocorrência; texto tinha três menções contextuais a "aluguel" | Desempate por verbo declarativo, depois por posição |
+| 17 | Studios de 0 quartos recomendados para quem pediu apartamento | Sem `quartos_min`, os studios entravam por serem os mais baratos | Exigir 1 quarto quando o critério não foi informado |
+| 18 | "Escritório" retornava salas comerciais | Expansão mapeava para "sala", que puxava imóveis comerciais | Termo removido da expansão; preferência tratada como filtro estrutural |
+| 19 | Preferências reduziam o resultado a 1 imóvel | Filtros combinados por AND esgotavam o espaço | Busca ampliada quando o resultado fica abaixo de 3 |
+| 20 | Relaxamento retornava vazio em pedidos impossíveis | Nível máximo ainda exigia quartos | Sexto nível abandona a exigência de quartos |
+| 21 | `R$` exibido como `R\`` no expander | Streamlit interpreta `$` como delimitador LaTeX em markdown | Duas funções de formatação: com escape para markdown, sem escape para `st.metric` |
+| 22 | Agente listava códigos e bairros dos imóveis em texto | Instrução proibia "preço e características", mas não códigos | Proibição explícita de códigos, bairros e listagem |
+| 23 | Erro 400 `tool_use_failed` | O modelo tenta chamadas de ferramenta não solicitadas | `tool_choice: none` explícito + retentativa para esse erro específico |
 
 ---
 
@@ -139,6 +169,15 @@ no processo.
 | 15 | Piso de plausibilidade de valores é heurístico | `agents/qualification_agent.py` |
 | 16 | Detecção de intenção usa janela de 25 caracteres para o verbo declarativo | `llm/demo_engine.py` |
 | 17 | Leads são criados na abertura da conversa, gerando registros vazios se o usuário não interagir | `agents/orchestrator.py` |
+| 18 | Preferências estruturais tratadas por regra explícita; casos não previstos são buscados apenas textualmente | `recommendation/ranker.py` |
+| 19 | Relaxamento usa constantes fixas, não calibradas por dados de conversão | `recommendation/ranker.py` |
+| 20 | No relaxamento máximo, pode recomendar imóveis distantes do pedido | `recommendation/ranker.py` |
+| 21 | Cards não exibem fotos — a base sintética não tem imagens | `ui/components/property_card.py` |
+| 22 | Apenas a recomendação mais recente permanece visível na tela | `ui/page_chat.py` |
+| 23 | O agente pode repetir uma pergunta literalmente quando o lead responde outra coisa | `llm/prompts.py` |
+| 24 | O modelo ocasionalmente tenta chamadas de ferramenta não solicitadas | `llm/groq_client.py` |
+| 25 | TF-IDF não reconhece sinônimos nativamente; mitigado por dicionário finito | `recommendation/retriever.py` |
+| 26 | Instruções de prompt concorrentes são cumpridas de forma inconsistente; comportamentos críticos foram movidos para código determinístico | `llm/prompts.py` |
 
 ---
 
