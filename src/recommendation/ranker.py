@@ -19,7 +19,7 @@ credibilidade do agente.
 import logging
 from dataclasses import dataclass, field
 
-from src.core.enums import Intent, InvestmentGoal, Operation
+from src.core.enums import Intent, InvestmentGoal, Operation, PropertyType
 from src.core.models import Lead, Property
 from src.persistence.property_repository import PropertyRepository
 from src.recommendation.retriever import PropertyRetriever, ResultadoBusca
@@ -178,6 +178,14 @@ class PropertyRanker:
         if quartos_min is not None and "quarto_extra" in estruturais:
             quartos_min += 1
 
+        # Studios não atendem quem busca moradia sem ter especificado a
+        # quantidade de quartos: enquanto esse critério não é informado,
+        # exigimos ao menos um quarto separado. O lead que quer studio
+        # pode pedi-lo explicitamente pelo tipo do imóvel.
+        quartos_filtro = quartos_min
+        if quartos_filtro is None and lead.tipo_imovel != PropertyType.STUDIO:
+            quartos_filtro = 1
+
         operacao = (
             Operation.ALUGUEL if lead.intent == Intent.ALUGUEL else Operation.VENDA
         )
@@ -188,7 +196,7 @@ class PropertyRanker:
             tipo=lead.tipo_imovel,
             operacao=operacao,
             preco_max=lead.preco_max,
-            quartos_min=quartos_min,
+            quartos_min=quartos_filtro,          # ← usa o filtro ajustado
             vagas_min=1 if "vaga" in estruturais else None,
             aceita_pet=True if "pet" in estruturais else None,
             mobiliado=True if "mobiliado" in estruturais else None,
@@ -205,7 +213,11 @@ class PropertyRanker:
                 tipo=lead.tipo_imovel,
                 operacao=operacao,
                 preco_max=lead.preco_max,
-                quartos_min=lead.quartos_desejados,
+                quartos_min=(
+                    lead.quartos_desejados
+                    if lead.quartos_desejados is not None
+                    else quartos_filtro          # ← preserva a exclusão de studios
+                ),
                 limite=40,
             )
             if len(candidatos_amplos) > len(candidatos):
@@ -220,7 +232,7 @@ class PropertyRanker:
             "zona": str(lead.zona_interesse) if lead.zona_interesse else None,
             "operacao": str(operacao),
             "preco_max": lead.preco_max,
-            "quartos_min": quartos_min,
+            "quartos_min": quartos_filtro,
             "filtros_extras": sorted(estruturais),
             "preferencias_relaxadas": criterios_preferencias_relaxadas,
         }
@@ -238,6 +250,7 @@ class PropertyRanker:
             )
 
         return self._ordenar(lead, candidatos, criterios, limite, estruturais)
+
 
     def _relaxar_filtros(
         self, lead: Lead, operacao: Operation, quartos_min: int | None

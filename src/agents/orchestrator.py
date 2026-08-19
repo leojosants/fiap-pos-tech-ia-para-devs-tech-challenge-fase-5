@@ -28,6 +28,7 @@ from src.core.models import Conversation, Lead, Message
 from src.llm.groq_client import GroqClient
 from src.persistence.conversation_repository import ConversationRepository
 from src.persistence.lead_repository import LeadRepository
+from src.recommendation.ranker import PropertyRanker, ResultadoRecomendacao
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,8 @@ class ResultadoTurno:
     intencao_confirmada: bool = False
     divergencias: list[str] = field(default_factory=list)
 
+    recomendacao: ResultadoRecomendacao | None = None
+
     latencia_total_ms: int = 0
     usou_llm: bool = False
     houve_degradacao: bool = False
@@ -87,6 +90,7 @@ class Orchestrator:
         self._conversas = ConversationRepository(db_path)
         self._qualificacao = QualificationAgent(self._cliente)
         self._conversacao = ConversationAgent(self._cliente)
+        self._ranker = PropertyRanker()
 
     # --------------------------------------------------------
     # Abertura de atendimento
@@ -194,12 +198,24 @@ class Orchestrator:
             qualificacao, lead_id, conversation_id
         )
 
-        # [4] Gerar a resposta
+        # [4] Recomendar imóveis, quando houver critérios suficientes
+        recomendacao = self._recomendar_se_possivel(
+            lead, lead_id, conversation_id
+        )
+        imoveis_contexto = (
+            self._ranker.formatar_para_prompt(recomendacao)
+            if recomendacao
+            else ""
+        )
+
+        # [5] Gerar a resposta
         if precisa_confirmar:
             resposta = self._responder_confirmando_intencao(lead)
         else:
             historico = self._conversas.historico_para_llm(conversation_id)
-            resposta = self._conversacao.responder(lead, texto, historico)
+            resposta = self._conversacao.responder(
+                lead, texto, historico, imoveis_contexto=imoveis_contexto
+            )
 
         # O motor determinístico pode inferir a intenção durante a geração
         # da resposta, após o lead já ter sido gravado. Regravamos para que
@@ -242,6 +258,7 @@ class Orchestrator:
             intent_identificada=qualificacao.intent_identificada,
             intencao_confirmada=precisa_confirmar,
             divergencias=qualificacao.divergencias,
+            recomendacao=recomendacao,
             latencia_total_ms=qualificacao.latencia_ms + resposta.latencia_ms,
             usou_llm=resposta.usou_llm,
             houve_degradacao=resposta.houve_degradacao,
@@ -291,6 +308,45 @@ class Orchestrator:
             texto=f"{reconhecimento} {_CONFIRMACAO_INTENCAO}",
             origem="deterministico",
         )
+
+
+    # --------------------------------------------------------
+    # Recomendação de imóveis
+    # --------------------------------------------------------
+
+    def _recomendar_se_possivel(
+        self, lead: Lead, lead_id: int, conversation_id: int
+    ) -> ResultadoRecomendacao | None:
+        """Consulta a base de imóveis quando o lead forneceu critérios.
+
+        Retorna None quando ainda não há informação suficiente — nesse
+        caso, nenhum imóvel é injetado no prompt, e o agente segue
+        conduzindo a qualificação.
+
+        A recomendação é recalculada a cada turno em vez de armazenada:
+        os critérios do lead evoluem durante a conversa, e resultados
+        desatualizados seriam piores que nenhum.
+        """
+        pode, _ = self._ranker.pode_recomendar(lead)
+        if not pode:
+            return None
+
+        resultado = self._ranker.recomendar(lead)
+        if not resultado.tem_resultados:
+            return None
+
+        self._conversas.registrar_evento(
+            EventType.IMOVEIS_RECOMENDADOS,
+            lead_id=lead_id,
+            conversation_id=conversation_id,
+            quantidade=len(resultado.recomendacoes),
+            codigos=[r.imovel.codigo for r in resultado.recomendacoes],
+            filtros_relaxados=resultado.criterios_usados.get(
+                "filtros_relaxados", False
+            ),
+        )
+
+        return resultado
 
     # --------------------------------------------------------
     # Estado do lead

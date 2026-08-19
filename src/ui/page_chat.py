@@ -8,6 +8,8 @@ import streamlit as st
 
 from src.ui import state
 from src.ui.components import qualification_panel
+from src.core.enums import Intent
+from src.ui.components import property_card, qualification_panel
 
 _AVATAR_AGENTE = "🏠"
 _AVATAR_LEAD = "👤"
@@ -52,6 +54,12 @@ def _processar_entrada(orquestrador, texto: str) -> None:
             )
         st.markdown(resultado.resposta)
 
+        if resultado.recomendacao and resultado.recomendacao.tem_resultados:
+            property_card.renderizar(
+                resultado.recomendacao,
+                modo_investimento=resultado.lead.intent == Intent.INVESTIMENTO,
+            )
+
     state.adicionar_mensagem("assistant", resultado.resposta)
     state.set_ultimo_turno(resultado)
 
@@ -72,6 +80,18 @@ def renderizar() -> None:
         avatar = _AVATAR_AGENTE if mensagem["role"] == "assistant" else _AVATAR_LEAD
         with st.chat_message(mensagem["role"], avatar=avatar):
             st.markdown(mensagem["content"])
+
+    # Os cards da última recomendação permanecem visíveis abaixo do
+    # histórico. Redesenhá-los em cada turno passado exigiria armazenar
+    # o estado de todos os turnos; manter apenas o mais recente é
+    # suficiente, pois os critérios evoluem e recomendações antigas
+    # perderiam validade.
+    ultimo = state.get_ultimo_turno()
+    if ultimo and ultimo.recomendacao and ultimo.recomendacao.tem_resultados:
+        property_card.renderizar(
+            ultimo.recomendacao,
+            modo_investimento=ultimo.lead.intent == Intent.INVESTIMENTO,
+        )
 
     if len(state.get_mensagens()) == 1:
         st.caption("Sugestões para começar:")

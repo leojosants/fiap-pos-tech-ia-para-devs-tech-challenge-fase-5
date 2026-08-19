@@ -233,10 +233,19 @@ def montar_prompt_sistema(lead: Lead, imoveis_contexto: str = "") -> str:
 
     if imoveis_contexto:
         partes.append(
-            "IMÓVEIS DISPONÍVEIS QUE ATENDEM ESTA PESSOA\n"
-            f"{imoveis_contexto}\n"
-            "Você pode mencionar estes imóveis. Não invente nenhum outro, "
-            "e não altere preços ou características."
+            "IMÓVEIS ENCONTRADOS PARA ESTA PESSOA\n"
+            f"{imoveis_contexto}\n\n"
+            "ESTRUTURA OBRIGATÓRIA DESTA MENSAGEM — exatamente duas frases:\n"
+            "  1. Avise que já encontrou opções. Exemplos: 'Já separei "
+            "algumas opções pra você', 'Encontrei três imóveis que podem "
+            "servir'.\n"
+            "  2. Faça a pergunta que faltava.\n\n"
+            "PROIBIDO: listar os imóveis, citar códigos (CL0000), nomes de "
+            "bairros, preços, metragem ou qualquer característica. Os cards "
+            "com todos esses dados já aparecem na tela logo abaixo da sua "
+            "mensagem — repeti-los em texto polui a conversa.\n"
+            "Sua mensagem inteira deve caber em duas frases curtas.\n"
+            "Nunca invente imóveis além dos listados acima."
         )
 
     return "\n\n---\n\n".join(partes)
