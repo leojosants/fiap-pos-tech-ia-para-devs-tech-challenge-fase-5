@@ -93,6 +93,18 @@ consideradas e justificativas. Base para o relatório técnico final.
 | Aluguel projetado a partir da rentabilidade | Exibir "—" | O investidor precisa saber o rendimento mensal; o rótulo distingue projeção de valor anunciado |
 | Termos que explicam o match expostos na interface | Só o score numérico | Torna a recomendação auditável: é a vantagem concreta do TF-IDF sobre embeddings |
 
+## 6c. Scoring de leads
+
+| Decisão | Alternativa descartada | Justificativa |
+| --- | --- | --- |
+| Regras de negócio explícitas | Classificador `scikit-learn` treinado | Sem dados reais de conversão disponíveis; um modelo treinado em rótulos sintéticos gerados pelas próprias regras não agregaria poder preditivo real, e adicionaria dependência de artefato serializado no deploy do Streamlit Cloud |
+| Score recalculado a cada turno | Sob demanda (ex.: abertura do dashboard) | Custo desprezível — função pura, sem I/O na camada de regras; garante que o painel do corretor nunca mostre um valor desatualizado |
+| `rules.py` (puro) separado de `builder.py` (impuro) | Regras acessando repositórios diretamente | `rules.py` testável sem banco (`tests/test_scoring_rules.py` roda em milissegundos); `builder.py` isola o único ponto de acesso a dado externo (base de imóveis e histórico de mensagens) |
+| Completude reaproveita `Lead.completude()` | Reimplementar o cálculo no módulo de scoring | Evita duplicar a lógica de slots por intenção, já correta e testada no domínio |
+| Disponibilidade e orçamento pontuados de forma binária | Escala graduada | `disponibilidade_reuniao` é texto livre sem categoria estruturada no domínio; graduar exigiria interpretação semântica fora do escopo de um módulo determinístico |
+| Detalhamento por sinal exposto em `ResultadoScoring` | Só o score final | Torna a priorização auditável para o corretor: mostra exatamente qual sinal pontuou e qual não, em vez de uma caixa-preta |
+| Evento `LEAD_CLASSIFICADO` disparado só quando a temperatura muda | Disparar a cada turno | Evita poluir a trilha de observabilidade com eventos redundantes quando a classificação permanece igual |
+
 ## 7. Interface
 
 | Decisão | Alternativa descartada | Justificativa |
@@ -178,6 +190,10 @@ no processo.
 | 24 | O modelo ocasionalmente tenta chamadas de ferramenta não solicitadas | `llm/groq_client.py` |
 | 25 | TF-IDF não reconhece sinônimos nativamente; mitigado por dicionário finito | `recommendation/retriever.py` |
 | 26 | Instruções de prompt concorrentes são cumpridas de forma inconsistente; comportamentos críticos foram movidos para código determinístico | `llm/prompts.py` |
+| 27 | Sinal de disponibilidade não distingue grau de disponibilidade; pontua apenas se o campo foi preenchido | `scoring/rules.py` |
+| 28 | Sinal de orçamento não gradua o quanto o valor declarado está acima ou abaixo da faixa mínima da zona; verifica apenas viabilidade binária | `scoring/rules.py` |
+| 29 | Sinal de intenção identificada não distingue se houve necessidade de confirmação explícita durante a conversa — esse dado não é persistido no domínio | `scoring/rules.py` |
+| 30 | Cortes de temperatura (70/40) são constantes fixas, não calibradas por dados reais de conversão | `scoring/rules.py` |
 
 ---
 

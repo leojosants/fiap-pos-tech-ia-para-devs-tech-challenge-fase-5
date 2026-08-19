@@ -29,6 +29,9 @@ from src.llm.groq_client import GroqClient
 from src.persistence.conversation_repository import ConversationRepository
 from src.persistence.lead_repository import LeadRepository
 from src.recommendation.ranker import PropertyRanker, ResultadoRecomendacao
+from src.persistence.property_repository import PropertyRepository
+from src.scoring import calcular_score
+from src.scoring.builder import construir_contexto
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +91,7 @@ class Orchestrator:
         self._cliente = cliente or GroqClient()
         self._leads = LeadRepository(db_path)
         self._conversas = ConversationRepository(db_path)
+        self._imoveis = PropertyRepository(db_path)  # NOVO — usado pelo scoring
         self._qualificacao = QualificationAgent(self._cliente)
         self._conversacao = ConversationAgent(self._cliente)
         self._ranker = PropertyRanker()
@@ -221,6 +225,7 @@ class Orchestrator:
         # da resposta, após o lead já ter sido gravado. Regravamos para que
         # essa alteração não se perca entre reruns da interface.
         self._atualizar_status(lead)
+        self._atualizar_score(lead, lead_id, conversation_id)
         self._leads.atualizar(lead)
 
         # [5] Persistir a saída
@@ -390,6 +395,39 @@ class Orchestrator:
 
         for divergencia in qualificacao.divergencias:
             logger.info("Divergência de extração: %s", divergencia)
+
+
+    def _atualizar_score(self, lead: Lead, lead_id: int, conversation_id: int) -> None:
+        """Recalcula score e temperatura do lead ao final do turno.
+
+        Função de custo desprezível (sem chamada a LLM); roda a cada
+        turno para que o score exibido nunca esteja desatualizado.
+        O evento LEAD_CLASSIFICADO só é registrado quando a temperatura
+        muda, para não poluir a trilha de observabilidade com eventos
+        redundantes em turnos onde a classificação permanece igual.
+        """
+        contexto = construir_contexto(
+            lead,
+            conversation_id,
+            imoveis=self._imoveis,
+            conversas=self._conversas,
+        )
+        temperatura_anterior = lead.temperature
+        resultado = calcular_score(lead, contexto)
+        lead.score = resultado.score
+        lead.temperature = resultado.temperature
+
+        if resultado.temperature != temperatura_anterior:
+            self._conversas.registrar_evento(
+                EventType.LEAD_CLASSIFICADO,
+                lead_id=lead_id,
+                conversation_id=conversation_id,
+                score=resultado.score,
+                temperatura=resultado.temperature,
+                temperatura_anterior=temperatura_anterior,
+                detalhamento=resultado.detalhamento,
+            )
+
 
     # --------------------------------------------------------
     # Encerramento
