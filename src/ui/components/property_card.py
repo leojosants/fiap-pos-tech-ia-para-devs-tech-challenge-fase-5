@@ -23,10 +23,25 @@ _ICONES_TIPO = {
 
 
 def _moeda(valor: float | None) -> str:
-    """Formata um valor no padrão monetário brasileiro."""
+    """Formata um valor no padrão monetário brasileiro.
+
+    Para uso em componentes que NÃO interpretam markdown, como st.metric.
+    """
     if valor is None:
         return "—"
     return f"R$ {valor:,.0f}".replace(",", ".")
+
+
+def _moeda_md(valor: float | None) -> str:
+    """Formata um valor monetário para componentes que interpretam
+    markdown (st.markdown, st.caption, st.write).
+
+    O cifrão é escapado porque dois '$' na mesma string acionam a
+    renderização de fórmula LaTeX no Streamlit.
+    """
+    if valor is None:
+        return "—"
+    return f"R\\$ {valor:,.0f}".replace(",", ".")
 
 
 def _renderizar_card(rec: Recomendacao, indice: int) -> None:
@@ -43,13 +58,13 @@ def _renderizar_card(rec: Recomendacao, indice: int) -> None:
 
         with valor:
             if im.preco_venda:
-                st.markdown(f"### {_moeda(im.preco_venda)}")
+                st.markdown(f"### {_moeda_md(im.preco_venda)}")
                 if im.preco_aluguel:
-                    st.caption(f"ou {_moeda(im.preco_aluguel)}/mês de aluguel")
+                    st.caption(f"ou {_moeda_md(im.preco_aluguel)}/mês de aluguel")
             elif im.preco_aluguel:
-                st.markdown(f"### {_moeda(im.preco_aluguel)}/mês")
+                st.markdown(f"### {_moeda_md(im.preco_aluguel)}/mês")
                 if im.custo_mensal_total:
-                    st.caption(f"{_moeda(im.custo_mensal_total)}/mês com encargos")
+                    st.caption(f"{_moeda_md(im.custo_mensal_total)}/mês com encargos")
 
         # Atributos físicos
         c1, c2, c3, c4 = st.columns(4)
@@ -77,12 +92,12 @@ def _renderizar_card(rec: Recomendacao, indice: int) -> None:
                 )
 
             detalhes = st.columns(3)
-            detalhes[0].caption(f"Condomínio: {_moeda(im.condominio)}")
-            detalhes[1].caption(f"IPTU: {_moeda(im.iptu)}/ano")
+            detalhes[0].caption(f"Condomínio: {_moeda_md(im.condominio)}")
+            detalhes[1].caption(f"IPTU: {_moeda_md(im.iptu)}/ano")
             detalhes[2].caption(f"Construção: {im.ano_construcao}")
 
             if im.preco_m2:
-                st.caption(f"Preço por m²: {_moeda(im.preco_m2)}")
+                st.caption(f"Preço por m²: {_moeda_md(im.preco_m2)}")
 
             if rec.termos_relevantes:
                 st.caption(
@@ -107,12 +122,23 @@ def _renderizar_card_investimento(rec: Recomendacao, indice: int) -> None:
             st.caption(f"`{im.codigo}` · {im.bairro}")
 
         with valor:
-            st.markdown(f"### {_moeda(im.preco_venda)}")
+            st.markdown(f"### {_moeda_md(im.preco_venda)}")
 
         c1, c2, c3 = st.columns(3)
         c1.metric("Rentabilidade", f"{im.rentabilidade_estimada:.2f}%", "ao ano")
         c2.metric("Valorização", f"{im.potencial_valorizacao:.1f}%", "ao ano")
-        c3.metric("Aluguel estimado", _moeda(im.preco_aluguel))
+
+        # Quando o imóvel não está anunciado para locação, projetamos o
+        # aluguel a partir da rentabilidade estimada — é o dado que
+        # interessa a quem compra para alugar. O rótulo distingue o valor
+        # anunciado da projeção.
+        if im.preco_aluguel:
+            c3.metric("Aluguel", _moeda(im.preco_aluguel), "anunciado")
+        elif im.preco_venda and im.rentabilidade_estimada:
+            projetado = im.preco_venda * (im.rentabilidade_estimada / 100) / 12
+            c3.metric("Aluguel", _moeda(projetado), "projetado")
+        else:
+            c3.metric("Aluguel", "—")
 
         st.caption(f"Perfil: **{im.perfil_investimento}** · {im.area_util:.0f}m²")
 
@@ -122,9 +148,14 @@ def _renderizar_card_investimento(rec: Recomendacao, indice: int) -> None:
 
         with st.expander("Ver detalhes"):
             st.write(im.descricao)
+
             if im.preco_m2:
-                st.caption(f"Preço por m²: {_moeda(im.preco_m2)}")
-            st.caption(f"Condomínio: {_moeda(im.condominio)} · IPTU: {_moeda(im.iptu)}/ano")
+                st.caption(f"Preço por m²: {_moeda_md(im.preco_m2)}")
+
+            st.caption(
+                f"Condomínio: {_moeda_md(im.condominio)}  \n"
+                f"IPTU: {_moeda_md(im.iptu)}/ano"
+            )
 
 
 def renderizar(
