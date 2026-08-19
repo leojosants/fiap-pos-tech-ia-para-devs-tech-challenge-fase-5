@@ -284,7 +284,7 @@ Sete blocos de teste executados na UI, com ~23 bugs encontrados e corrigidos:
 
 ## 12. Como retomar
 
-1. Colar as **Instruções do Projeto** (o bloco longo com os 16 itens)
+1. Colar as **Instruções do Projeto** (o bloco longo com os 16 itens).
 2. Colar este documento
 3. Informar a etapa desejada — provavelmente **Etapa 6**
 4. Se necessário, enviar `docs/decisoes_tecnicas.md` para o histórico completo de decisões e bugs
