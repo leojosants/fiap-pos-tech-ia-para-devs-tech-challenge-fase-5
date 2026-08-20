@@ -47,9 +47,13 @@ Outras regras:
 O QUE VOCÊ NUNCA FAZ
 - Não invente imóveis, preços, endereços ou disponibilidade.
 - Não prometa condições, descontos ou aprovação de financiamento.
-- Não afirme que um corretor entrará em contato em data ou horário
-  específico. Você registra a disponibilidade informada; quem confirma o
-  horário é a equipe. Diga apenas que passará as informações adiante.
+- Não afirme, por conta própria, que um corretor entrará em contato em
+  data ou horário específico. A ÚNICA exceção é quando este mesmo
+  horário aparecer explicitamente marcado como confirmado no bloco
+  "COMPROMISSO CONFIRMADO NESTE TURNO", mais abaixo neste contexto —
+  nesse caso, e somente nesse caso, você pode informar exatamente essa
+  data e horário. Fora dessa situação, você registra a disponibilidade
+  informada; quem confirma o horário é a equipe.
 - Não insista se a pessoa demonstrar desinteresse — ofereça retomar depois.
 - Não peça CPF, RG, dados bancários ou qualquer documento.
 - Não repita uma pergunta que a pessoa já respondeu.
@@ -221,7 +225,42 @@ def _bloco_contexto_lead(lead: Lead) -> str:
     return "\n".join(linhas)
 
 
-def montar_prompt_sistema(lead: Lead, imoveis_contexto: str = "") -> str:
+def _bloco_instrucao_agendamento(agendamento_contexto: str) -> str:
+    """Instrução de como usar o bloco de agendamento no prompt.
+
+    O dado bruto (data confirmada, ou lista de sugestões) já vem pronto
+    do scheduling_agent — aqui só entra a instrução de uso, mesma
+    divisão de responsabilidade já aplicada a imoveis_contexto.
+
+    Distingue os dois casos pelo prefixo do bloco recebido, porque cada
+    um exige uma instrução diferente: um compromisso confirmado pode
+    ser afirmado como fato; uma lista de sugestões só pode ser oferecida
+    como opção, nunca como algo já marcado.
+    """
+    if agendamento_contexto.startswith("COMPROMISSO CONFIRMADO"):
+        return (
+            f"{agendamento_contexto}\n\n"
+            "Este é o ÚNICO horário que você pode confirmar nesta "
+            "mensagem — é exatamente o que está marcado acima; não "
+            "invente, não arredonde, não troque o horário.\n"
+            "Informe a pessoa, em UMA frase natural, que esse horário "
+            "está confirmado. Não repita isso em mensagens futuras, a "
+            "menos que a pessoa pergunte de novo."
+        )
+
+    return (
+        f"{agendamento_contexto}\n\n"
+        "Ofereça estes horários à pessoa como opções, com suas próprias "
+        "palavras — não copie a lista literalmente.\n"
+        "PROIBIDO sugerir qualquer horário que não esteja nesta lista.\n"
+        "Não diga que algum horário está confirmado até a pessoa "
+        "escolher um."
+    )
+
+
+def montar_prompt_sistema(
+    lead: Lead, imoveis_contexto: str = "", agendamento_contexto: str = ""
+) -> str:
     """Compõe o prompt de sistema para o turno atual da conversa."""
     partes = [PERSONA_BASE, ROTEIROS[lead.intent]]
 
@@ -247,6 +286,9 @@ def montar_prompt_sistema(lead: Lead, imoveis_contexto: str = "") -> str:
             "Sua mensagem inteira deve caber em duas frases curtas.\n"
             "Nunca invente imóveis além dos listados acima."
         )
+
+    if agendamento_contexto:
+        partes.append(_bloco_instrucao_agendamento(agendamento_contexto))
 
     return "\n\n---\n\n".join(partes)
 

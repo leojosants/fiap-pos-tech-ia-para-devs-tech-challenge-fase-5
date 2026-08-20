@@ -292,6 +292,91 @@ class TestAgendarSePossivel:
             agent.agendar_se_possivel(lead_sem_id, referencia=REFERENCIA)
 
 
+class TestTextoTurnoComoSegundaTentativa:
+    """Cobre o caso em que disponibilidade_reuniao já ficou congelada com
+    um texto vago (o QualificationAgent só grava esse slot uma vez), e o
+    lead responde a uma sugestão anterior na mensagem atual."""
+
+    def test_disponibilidade_vaga_mas_texto_turno_interpretavel_cria_appointment(
+        self, agent, lead_persistido
+    ):
+        lead_persistido.disponibilidade_reuniao = "qualquer hora tá bom"
+
+        resultado = agent.agendar_se_possivel(
+            lead_persistido,
+            referencia=REFERENCIA,
+            texto_turno="terça de manhã então",
+        )
+
+        assert resultado.houve_agendamento
+        assert resultado.appointment.data_hora.date() == datetime(2026, 8, 25).date()
+
+    def test_appointment_via_texto_turno_registra_o_texto_correto(
+        self, agent, lead_persistido
+    ):
+        lead_persistido.disponibilidade_reuniao = "qualquer hora tá bom"
+
+        resultado = agent.agendar_se_possivel(
+            lead_persistido,
+            referencia=REFERENCIA,
+            texto_turno="terça de manhã então",
+        )
+
+        assert "terça de manhã então" in resultado.appointment.observacoes
+        assert "qualquer hora" not in resultado.appointment.observacoes
+
+    def test_disponibilidade_reuniao_interpretavel_nao_precisa_de_texto_turno(
+        self, agent, lead_persistido
+    ):
+        """Quando disponibilidade_reuniao já é suficiente, texto_turno
+        nem é consultado — evita reinterpretar a mesma informação duas
+        vezes de fontes diferentes."""
+        lead_persistido.disponibilidade_reuniao = "sexta de manhã"
+
+        resultado = agent.agendar_se_possivel(
+            lead_persistido,
+            referencia=REFERENCIA,
+            texto_turno="na verdade prefiro quarta",  # deve ser ignorado
+        )
+
+        assert resultado.appointment.data_hora.date() == datetime(2026, 8, 21).date()
+
+    def test_ambos_vagos_gera_sugestoes(self, agent, lead_persistido):
+        lead_persistido.disponibilidade_reuniao = "qualquer hora"
+
+        resultado = agent.agendar_se_possivel(
+            lead_persistido,
+            referencia=REFERENCIA,
+            texto_turno="tanto faz pra mim",
+        )
+
+        assert resultado.appointment is None
+        assert len(resultado.sugestoes) == 4
+
+    def test_sem_disponibilidade_nenhuma_mas_texto_turno_interpretavel_cria_appointment(
+        self, agent, lead_persistido
+    ):
+        """Situação hipotética (na prática o QualificationAgent grava
+        disponibilidade_reuniao no mesmo turno em que é dita), mas o
+        método deve se comportar de forma previsível mesmo assim."""
+        resultado = agent.agendar_se_possivel(
+            lead_persistido,
+            referencia=REFERENCIA,
+            texto_turno="pode ser amanhã de tarde",
+        )
+
+        assert resultado.houve_agendamento
+
+    def test_texto_turno_vazio_mantem_comportamento_anterior(
+        self, agent, lead_persistido
+    ):
+        """Retrocompatibilidade: chamada sem texto_turno continua
+        funcionando exatamente como antes desta mudança."""
+        resultado = agent.agendar_se_possivel(lead_persistido, referencia=REFERENCIA)
+        assert resultado.appointment is None
+        assert resultado.sugestoes == []
+
+
 # ============================================================
 # eventos_do_resultado
 # ============================================================
@@ -326,3 +411,73 @@ class TestEventosDoResultado:
         assert tipo == EventType.AGENDAMENTO_CRIADO
         assert detalhes["appointment_id"] == 7
         assert detalhes["tipo"] == "visita_imovel"
+
+
+# ============================================================
+# formatar_para_prompt
+# ============================================================
+
+class TestFormatarParaPrompt:
+
+    def test_resultado_vazio_produz_string_vazia(self):
+        resultado = ResultadoAgendamento()
+        assert SchedulingAgent.formatar_para_prompt(resultado) == ""
+
+    def test_agendamento_ja_existente_produz_string_vazia(self):
+        """Não repete a confirmação a cada turno — só quando algo muda."""
+        ap = Appointment(
+            id=1, lead_id=1, tipo=AppointmentType.REUNIAO_ONLINE,
+            data_hora=REFERENCIA,
+        )
+        resultado = ResultadoAgendamento(appointment=ap, ja_existia=True)
+        assert SchedulingAgent.formatar_para_prompt(resultado) == ""
+
+    def test_agendamento_novo_inclui_tipo_e_data(self):
+        ap = Appointment(
+            id=1, lead_id=1, tipo=AppointmentType.REUNIAO_ONLINE,
+            data_hora=datetime(2026, 8, 21, 15, 0),
+        )
+        resultado = ResultadoAgendamento(appointment=ap, ja_existia=False)
+
+        bloco = SchedulingAgent.formatar_para_prompt(resultado)
+
+        assert "COMPROMISSO CONFIRMADO" in bloco
+        assert "reunião online" in bloco
+        assert "sexta-feira, 21/08 às 15h00" in bloco
+
+    def test_agendamento_novo_tipo_visita_usa_rotulo_correto(self):
+        ap = Appointment(
+            id=1, lead_id=1, tipo=AppointmentType.VISITA_IMOVEL,
+            data_hora=datetime(2026, 8, 21, 15, 0),
+        )
+        resultado = ResultadoAgendamento(appointment=ap, ja_existia=False)
+
+        bloco = SchedulingAgent.formatar_para_prompt(resultado)
+        assert "visita ao imóvel" in bloco
+
+    def test_sugestoes_aparecem_uma_por_linha(self):
+        resultado = ResultadoAgendamento(
+            sugestoes=["terça-feira, 25/08 às 10h00", "terça-feira, 25/08 às 15h00"]
+        )
+
+        bloco = SchedulingAgent.formatar_para_prompt(resultado)
+
+        assert "HORÁRIOS SUGERIDOS" in bloco
+        assert "- terça-feira, 25/08 às 10h00" in bloco
+        assert "- terça-feira, 25/08 às 15h00" in bloco
+
+    def test_agendamento_confirmado_tem_prioridade_sobre_sugestoes(self):
+        """Situação hipotética (não ocorre na prática, mas o método deve
+        ser previsível mesmo assim): se ambos vierem preenchidos, o
+        agendamento confirmado é o que importa."""
+        ap = Appointment(
+            id=1, lead_id=1, tipo=AppointmentType.REUNIAO_ONLINE,
+            data_hora=REFERENCIA,
+        )
+        resultado = ResultadoAgendamento(
+            appointment=ap, ja_existia=False, sugestoes=["algo"]
+        )
+
+        bloco = SchedulingAgent.formatar_para_prompt(resultado)
+        assert "COMPROMISSO CONFIRMADO" in bloco
+        assert "HORÁRIOS SUGERIDOS" not in bloco

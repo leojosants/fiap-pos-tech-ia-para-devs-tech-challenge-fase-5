@@ -78,6 +78,7 @@ class ConversationAgent:
         historico: list[dict],
         *,
         imoveis_contexto: str = "",
+        agendamento_contexto: str = "",
     ) -> RespostaAgente:
         """Gera a próxima fala do agente.
 
@@ -87,11 +88,17 @@ class ConversationAgent:
 
         O parâmetro imoveis_contexto recebe as recomendações já
         selecionadas pelo módulo de busca; o agente apenas as apresenta,
-        nunca as escolhe.
+        nunca as escolhe. agendamento_contexto segue o mesmo princípio
+        para compromissos: só chega aqui já pronto pelo scheduling_agent.
+
+        Nenhum dos dois contextos é repassado ao motor determinístico —
+        mesma decisão já tomada para imoveis_contexto: o modo demo
+        responde por padrões fixos, sem capacidade de incorporar dados
+        variáveis em linguagem natural.
         """
         if self._cliente.disponivel:
             resposta = self._responder_com_llm(
-                lead, historico, imoveis_contexto
+                lead, historico, imoveis_contexto, agendamento_contexto
             )
             if resposta is not None:
                 return resposta
@@ -112,10 +119,14 @@ class ConversationAgent:
     # --------------------------------------------------------
 
     def _responder_com_llm(
-        self, lead: Lead, historico: list[dict], imoveis_contexto: str
+        self,
+        lead: Lead,
+        historico: list[dict],
+        imoveis_contexto: str,
+        agendamento_contexto: str,
     ) -> RespostaAgente | None:
         """Gera a resposta pelo modelo. Devolve None se a chamada falhar."""
-        prompt = montar_prompt_sistema(lead, imoveis_contexto)
+        prompt = montar_prompt_sistema(lead, imoveis_contexto, agendamento_contexto)
         resposta = self._cliente.conversar(prompt, historico)
 
         if not resposta.sucesso or not resposta.conteudo.strip():

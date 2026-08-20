@@ -66,6 +66,12 @@ _PERIODOS_DIA = {
 
 _HORARIO_EXPLICITO = re.compile(r"\b(\d{1,2})h(\d{2})?\b")
 
+_TIPOS_LEGIVEIS = {
+    AppointmentType.VISITA_IMOVEL: "visita ao imóvel",
+    AppointmentType.REUNIAO_ONLINE: "reunião online",
+    AppointmentType.REUNIAO_PRESENCIAL: "reunião presencial",
+}
+
 
 def _normalizar(texto: str) -> str:
     """Minúsculo e sem acentos, para comparação robusta e sem duplicação
@@ -236,15 +242,25 @@ class SchedulingAgent:
         tipo: AppointmentType = AppointmentType.REUNIAO_ONLINE,
         property_id: int | None = None,
         referencia: datetime | None = None,
+        texto_turno: str = "",
     ) -> ResultadoAgendamento:
         """Decide o que fazer com a disponibilidade do lead neste turno.
 
         Ordem de decisão:
           1. Já existe um compromisso ativo? Não duplica — devolve o
              existente (ja_existia=True).
-          2. Disponibilidade informada e interpretável? Cria o Appointment.
-          3. Disponibilidade informada mas vaga? Gera sugestões.
-          4. Nada informado ainda? Não há o que fazer neste turno.
+          2. `lead.disponibilidade_reuniao` é interpretável? Cria o
+             Appointment a partir dela.
+          3. Não é interpretável (ou está vazia), mas a mensagem deste
+             turno (`texto_turno`) é? Cria o Appointment a partir dela.
+             Cobre o caso em que o lead respondeu a uma sugestão anterior
+             ("terça está bom") — o QualificationAgent só grava
+             disponibilidade_reuniao quando o slot ainda está vazio, então
+             uma resposta a uma sugestão não reabriria esse campo sem
+             este segundo caminho de interpretação.
+          4. Nenhuma das duas é interpretável, mas havia algo informado?
+             Gera sugestões.
+          5. Nada informado em lugar nenhum? Não há o que fazer.
 
         `referencia` existe para tornar os testes determinísticos —
         sem ela, usa o momento real (datetime.now()).
@@ -258,28 +274,69 @@ class SchedulingAgent:
         if existente is not None:
             return ResultadoAgendamento(appointment=existente, ja_existia=True)
 
-        if not lead.disponibilidade_reuniao:
-            return ResultadoAgendamento()
+        origem_texto = ""
+        momento: datetime | None = None
 
-        momento = self._interpretar(lead.disponibilidade_reuniao, referencia)
+        if lead.disponibilidade_reuniao:
+            momento = self._interpretar(lead.disponibilidade_reuniao, referencia)
+            origem_texto = lead.disponibilidade_reuniao
 
-        if momento is None:
-            return ResultadoAgendamento(
-                sugestoes=self._gerar_sugestoes(referencia)
+        if momento is None and texto_turno:
+            momento = self._interpretar(texto_turno, referencia)
+            if momento is not None:
+                origem_texto = texto_turno
+
+        if momento is not None:
+            appointment = Appointment(
+                lead_id=lead.id,
+                tipo=tipo,
+                data_hora=momento,
+                property_id=property_id,
+                observacoes=(
+                    "Disponibilidade original informada pelo lead: "
+                    f'"{origem_texto}"'
+                ),
+            )
+            criado = self._agendamentos.criar(appointment)
+            return ResultadoAgendamento(appointment=criado)
+
+        if lead.disponibilidade_reuniao or texto_turno:
+            return ResultadoAgendamento(sugestoes=self._gerar_sugestoes(referencia))
+
+        return ResultadoAgendamento()
+
+    # --------------------------------------------------------
+    # Formatação para o prompt do LLM
+    # --------------------------------------------------------
+
+    @staticmethod
+    def formatar_para_prompt(resultado: ResultadoAgendamento) -> str:
+        """Bloco de dados sobre o agendamento, para o prompt da Sofia.
+
+        Só o dado — a instrução de como usá-lo (estrutura da mensagem,
+        proibição de inventar horários além destes) fica em
+        montar_prompt_sistema(), a mesma divisão já usada para
+        imoveis_contexto.
+
+        Devolve string vazia quando nada mudou NESTE turno: um
+        agendamento pré-existente (ja_existia=True) não gera contexto
+        novo, para a Sofia não repetir a confirmação a cada mensagem
+        — decisão registrada na conversa sobre o Passo 3.
+        """
+        if resultado.houve_agendamento:
+            ap = resultado.appointment
+            tipo_legivel = _TIPOS_LEGIVEIS.get(ap.tipo, str(ap.tipo))
+            return (
+                "COMPROMISSO CONFIRMADO NESTE TURNO\n"
+                f"Tipo: {tipo_legivel}\n"
+                f"Quando: {_formatar_data_legivel(ap.data_hora)}"
             )
 
-        appointment = Appointment(
-            lead_id=lead.id,
-            tipo=tipo,
-            data_hora=momento,
-            property_id=property_id,
-            observacoes=(
-                "Disponibilidade original informada pelo lead: "
-                f'"{lead.disponibilidade_reuniao}"'
-            ),
-        )
-        criado = self._agendamentos.criar(appointment)
-        return ResultadoAgendamento(appointment=criado)
+        if resultado.sugestoes:
+            linhas = "\n".join(f"- {s}" for s in resultado.sugestoes)
+            return f"HORÁRIOS SUGERIDOS NESTE TURNO\n{linhas}"
+
+        return ""
 
     # --------------------------------------------------------
     # Eventos — mesmo contrato do qualification_agent
