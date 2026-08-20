@@ -356,6 +356,6 @@ class SchedulingAgent:
             {
                 "appointment_id": ap.id,
                 "data_hora": ap.data_hora.isoformat(),
-                "tipo": str(ap.tipo),
+                "tipo_compromisso": str(ap.tipo),
             },
         )]

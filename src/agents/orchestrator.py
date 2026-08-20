@@ -17,6 +17,7 @@ from pathlib import Path
 
 from src.agents.conversation_agent import ConversationAgent, RespostaAgente
 from src.agents.qualification_agent import QualificationAgent, ResultadoQualificacao
+from src.agents.scheduling_agent import ResultadoAgendamento, SchedulingAgent
 from src.core.enums import (
     ConversationStatus,
     EventType,
@@ -26,6 +27,7 @@ from src.core.enums import (
 )
 from src.core.models import Conversation, Lead, Message
 from src.llm.groq_client import GroqClient
+from src.persistence.appointment_repository import AppointmentRepository
 from src.persistence.conversation_repository import ConversationRepository
 from src.persistence.lead_repository import LeadRepository
 from src.recommendation.ranker import PropertyRanker, ResultadoRecomendacao
@@ -66,6 +68,7 @@ class ResultadoTurno:
     divergencias: list[str] = field(default_factory=list)
 
     recomendacao: ResultadoRecomendacao | None = None
+    agendamento: ResultadoAgendamento | None = None
 
     latencia_total_ms: int = 0
     usou_llm: bool = False
@@ -95,6 +98,7 @@ class Orchestrator:
         self._qualificacao = QualificationAgent(self._cliente)
         self._conversacao = ConversationAgent(self._cliente)
         self._ranker = PropertyRanker()
+        self._agendamento = SchedulingAgent(AppointmentRepository(db_path))
 
     # --------------------------------------------------------
     # Abertura de atendimento
@@ -212,13 +216,23 @@ class Orchestrator:
             else ""
         )
 
+        # [4.5] Agendar, quando a disponibilidade permitir
+        agendamento = self._agendar_se_possivel(
+            lead, lead_id, conversation_id, texto
+        )
+        agendamento_contexto = self._agendamento.formatar_para_prompt(agendamento)
+
         # [5] Gerar a resposta
         if precisa_confirmar:
             resposta = self._responder_confirmando_intencao(lead)
         else:
             historico = self._conversas.historico_para_llm(conversation_id)
             resposta = self._conversacao.responder(
-                lead, texto, historico, imoveis_contexto=imoveis_contexto
+                lead,
+                texto,
+                historico,
+                imoveis_contexto=imoveis_contexto,
+                agendamento_contexto=agendamento_contexto,
             )
 
         # O motor determinístico pode inferir a intenção durante a geração
@@ -264,6 +278,7 @@ class Orchestrator:
             intencao_confirmada=precisa_confirmar,
             divergencias=qualificacao.divergencias,
             recomendacao=recomendacao,
+            agendamento=agendamento,
             latencia_total_ms=qualificacao.latencia_ms + resposta.latencia_ms,
             usou_llm=resposta.usou_llm,
             houve_degradacao=resposta.houve_degradacao,
@@ -350,6 +365,47 @@ class Orchestrator:
                 "filtros_relaxados", False
             ),
         )
+
+        return resultado
+
+    # --------------------------------------------------------
+    # Agendamento
+    # --------------------------------------------------------
+
+    def _agendar_se_possivel(
+        self, lead: Lead, lead_id: int, conversation_id: int, texto: str
+    ) -> ResultadoAgendamento:
+        """Tenta formalizar um compromisso a partir da disponibilidade do lead.
+
+        Só tenta depois que a intenção está definida: nenhum roteiro
+        pergunta sobre disponibilidade antes disso, e confirmar um
+        horário sem saber se é para compra, aluguel ou investimento
+        seria prematuro. Disponibilidade eventualmente capturada antes
+        disso não se perde — o QualificationAgent já a persistiu em
+        disponibilidade_reuniao, e este método volta a considerá-la assim
+        que a intenção for definida em um turno seguinte.
+
+        Quando um agendamento é criado, marca lead.status como AGENDADO
+        diretamente em memória — não precisa persistir aqui: o turno já
+        chama self._leads.atualizar(lead) mais adiante, depois da geração
+        da resposta, e a guarda em _atualizar_status() impede que esse
+        status seja sobrescrito na mesma passagem.
+        """
+        if lead.intent == Intent.INDEFINIDA:
+            return ResultadoAgendamento()
+
+        resultado = self._agendamento.agendar_se_possivel(lead, texto_turno=texto)
+
+        if resultado.houve_agendamento:
+            lead.status = LeadStatus.AGENDADO
+
+        for tipo, detalhes in self._agendamento.eventos_do_resultado(resultado):
+            self._conversas.registrar_evento(
+                tipo,
+                lead_id=lead_id,
+                conversation_id=conversation_id,
+                **detalhes,
+            )
 
         return resultado
 

@@ -410,7 +410,7 @@ class TestEventosDoResultado:
         tipo, detalhes = eventos[0]
         assert tipo == EventType.AGENDAMENTO_CRIADO
         assert detalhes["appointment_id"] == 7
-        assert detalhes["tipo"] == "visita_imovel"
+        assert detalhes["tipo_compromisso"] == "visita_imovel"
 
 
 # ============================================================
