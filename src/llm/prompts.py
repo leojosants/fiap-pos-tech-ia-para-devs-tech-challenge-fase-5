@@ -294,8 +294,87 @@ def montar_prompt_sistema(
 
 
 # ============================================================
-# MENSAGEM DE ABERTURA
+# RESUMO PARA O CORRETOR
 # ============================================================
+
+PROMPT_RESUMO_CORRETOR = """\
+Você escreve resumos internos para corretores da imobiliária CasaLead,
+a partir dos dados já coletados pela assistente virtual Sofia durante
+o atendimento a um lead.
+
+O QUE VOCÊ RECEBE
+Um conjunto de dados estruturados sobre o lead: intenção, informações
+de qualificação, classificação de prioridade e, quando existir,
+compromisso já agendado.
+
+O QUE VOCÊ ESCREVE
+Um resumo em português, direto e factual, para o corretor ler antes de
+entrar em contato. Estrutura esperada, em texto corrido (não lista):
+
+  1. Quem é o lead e o que procura (1–2 frases).
+  2. Os critérios relevantes que já foram coletados.
+  3. O nível de prioridade e por que, com base no que foi informado.
+  4. Próximo passo recomendado (ex.: confirmar visita, ligar para
+     alinhar orçamento, apresentar opções de investimento).
+
+REGRAS
+- Baseie-se exclusivamente nos dados fornecidos. Nunca invente
+  informação que não esteja explicitamente presente.
+- Tom profissional e direto — o corretor está sem tempo, não quer
+  floreio nem introdução.
+- No máximo 6 frases no total.
+- Não repita os dados brutos linha a linha; sintetize em prosa.
+- Se algo relevante não foi informado, simplesmente não fale sobre
+  isso — não trate a ausência como um problema a ser mencionado.
+
+Responda apenas com o resumo, sem título, sem saudação, sem assinatura.
+"""
+
+_INTENCOES_LEGIVEIS = {
+    Intent.COMPRA: "compra de imóvel",
+    Intent.ALUGUEL: "aluguel de imóvel",
+    Intent.INVESTIMENTO: "investimento imobiliário",
+    Intent.INDEFINIDA: "não identificada",
+}
+
+
+def montar_conteudo_resumo(lead: Lead, agendamento_texto: str = "") -> str:
+    """Monta o dado estruturado enviado ao modelo para gerar o resumo.
+
+    Reaproveita os mesmos rótulos e formatação de valor já usados no
+    contexto conversacional (_ROTULOS_SLOT, _formatar_valor) — é a
+    mesma informação do lead, só que endereçada ao corretor em vez do
+    lead. `agendamento_texto`, quando informado, é um texto já pronto
+    (não um dos blocos do scheduling_agent — aquele fala com o lead;
+    este texto fala com o corretor).
+    """
+    linhas: list[str] = []
+
+    if lead.nome:
+        linhas.append(f"Nome: {lead.nome}")
+
+    linhas.append(
+        f"Intenção: {_INTENCOES_LEGIVEIS.get(lead.intent, str(lead.intent))}"
+    )
+    linhas.append(f"Status no funil: {lead.status}")
+    linhas.append(f"Prioridade: {lead.temperature} (score {lead.score}/100)")
+
+    for slot, preenchido in lead.slots_status().items():
+        if preenchido:
+            rotulo = _ROTULOS_SLOT.get(slot, slot)
+            valor = _formatar_valor(getattr(lead, slot))
+            linhas.append(f"{rotulo.capitalize()}: {valor}")
+
+    if lead.preferencias:
+        linhas.append(f"Preferências declaradas: {', '.join(lead.preferencias)}")
+
+    if agendamento_texto:
+        linhas.append(agendamento_texto)
+
+    return "\n".join(linhas)
+
+
+
 
 SAUDACAO_INICIAL = (
     "Oi! Eu sou a Sofia, da CasaLead. 🏠\n\n"
