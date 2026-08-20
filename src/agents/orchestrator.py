@@ -101,7 +101,7 @@ class Orchestrator:
         self._imoveis = PropertyRepository(db_path)  # NOVO — usado pelo scoring
         self._qualificacao = QualificationAgent(self._cliente)
         self._conversacao = ConversationAgent(self._cliente)
-        self._ranker = PropertyRanker()
+        self._ranker = PropertyRanker(self._imoveis)
 
         # Compartilhado entre SchedulingAgent e Summarizer — ambos só
         # leem/gravam a tabela appointments, sem estado próprio que
