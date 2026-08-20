@@ -23,15 +23,19 @@ from src.core.enums import (
     EventType,
     Intent,
     LeadStatus,
+    LeadTemperature,
     MessageRole,
 )
 from src.core.models import Conversation, Lead, Message
+from src.followup.followup_manager import FollowupManager, ResultadoFollowup
 from src.llm.groq_client import GroqClient
 from src.persistence.appointment_repository import AppointmentRepository
 from src.persistence.conversation_repository import ConversationRepository
+from src.persistence.followup_repository import FollowupRepository
 from src.persistence.lead_repository import LeadRepository
 from src.recommendation.ranker import PropertyRanker, ResultadoRecomendacao
 from src.persistence.property_repository import PropertyRepository
+from src.reporting.summarizer import ResumoGerado, Summarizer
 from src.scoring import calcular_score
 from src.scoring.builder import construir_contexto
 
@@ -98,7 +102,16 @@ class Orchestrator:
         self._qualificacao = QualificationAgent(self._cliente)
         self._conversacao = ConversationAgent(self._cliente)
         self._ranker = PropertyRanker()
-        self._agendamento = SchedulingAgent(AppointmentRepository(db_path))
+
+        # Compartilhado entre SchedulingAgent e Summarizer — ambos só
+        # leem/gravam a tabela appointments, sem estado próprio que
+        # justifique instâncias separadas.
+        self._agendamentos_repo = AppointmentRepository(db_path)
+        self._agendamento = SchedulingAgent(self._agendamentos_repo)
+        self._resumo = Summarizer(self._cliente, self._agendamentos_repo)
+        self._followup = FollowupManager(
+            FollowupRepository(db_path), self._conversas, self._leads
+        )
 
     # --------------------------------------------------------
     # Abertura de atendimento
@@ -239,7 +252,14 @@ class Orchestrator:
         # da resposta, após o lead já ter sido gravado. Regravamos para que
         # essa alteração não se perca entre reruns da interface.
         self._atualizar_status(lead)
-        self._atualizar_score(lead, lead_id, conversation_id)
+        temperatura_mudou = self._atualizar_score(lead, lead_id, conversation_id)
+        self._resumir_se_necessario(
+            lead,
+            lead_id,
+            conversation_id,
+            temperatura_mudou=temperatura_mudou,
+            agendamento=agendamento,
+        )
         self._leads.atualizar(lead)
 
         # [5] Persistir a saída
@@ -453,7 +473,9 @@ class Orchestrator:
             logger.info("Divergência de extração: %s", divergencia)
 
 
-    def _atualizar_score(self, lead: Lead, lead_id: int, conversation_id: int) -> None:
+    def _atualizar_score(
+        self, lead: Lead, lead_id: int, conversation_id: int
+    ) -> bool:
         """Recalcula score e temperatura do lead ao final do turno.
 
         Função de custo desprezível (sem chamada a LLM); roda a cada
@@ -461,6 +483,9 @@ class Orchestrator:
         O evento LEAD_CLASSIFICADO só é registrado quando a temperatura
         muda, para não poluir a trilha de observabilidade com eventos
         redundantes em turnos onde a classificação permanece igual.
+
+        Devolve True quando a temperatura mudou neste turno — usado por
+        _resumir_se_necessario() para decidir se um resumo é devido.
         """
         contexto = construir_contexto(
             lead,
@@ -473,7 +498,8 @@ class Orchestrator:
         lead.score = resultado.score
         lead.temperature = resultado.temperature
 
-        if resultado.temperature != temperatura_anterior:
+        mudou = resultado.temperature != temperatura_anterior
+        if mudou:
             self._conversas.registrar_evento(
                 EventType.LEAD_CLASSIFICADO,
                 lead_id=lead_id,
@@ -484,6 +510,46 @@ class Orchestrator:
                 detalhamento=resultado.detalhamento,
             )
 
+        return mudou
+
+    # --------------------------------------------------------
+    # Resumo para o corretor
+    # --------------------------------------------------------
+
+    def _resumir_se_necessario(
+        self,
+        lead: Lead,
+        lead_id: int,
+        conversation_id: int,
+        *,
+        temperatura_mudou: bool,
+        agendamento: ResultadoAgendamento,
+    ) -> ResumoGerado | None:
+        """Gera um resumo para o corretor quando algo relevante mudou.
+
+        Gatilhos (decisão já validada antes da implementação): o lead
+        acabou de ficar quente, ou um agendamento acabou de ser criado
+        neste turno. Fora esses dois casos, gerar um resumo a cada turno
+        seria custo sem benefício — o corretor não precisa de um resumo
+        novo a cada mensagem trocada.
+        """
+        ficou_quente = temperatura_mudou and lead.temperature == LeadTemperature.QUENTE
+        agendamento_confirmado = agendamento.houve_agendamento
+
+        if not (ficou_quente or agendamento_confirmado):
+            return None
+
+        resumo = self._resumo.gerar(lead)
+
+        for tipo, detalhes in self._resumo.eventos_do_resultado(resumo):
+            self._conversas.registrar_evento(
+                tipo,
+                lead_id=lead_id,
+                conversation_id=conversation_id,
+                **detalhes,
+            )
+
+        return resumo
 
     # --------------------------------------------------------
     # Encerramento
@@ -507,6 +573,58 @@ class Orchestrator:
         self._conversas.atualizar_status_conversa(
             conversation_id, ConversationStatus.AGUARDANDO_LEAD
         )
+
+    # --------------------------------------------------------
+    # Follow-up
+    # --------------------------------------------------------
+
+    def executar_verificacao_followup(
+        self, *, horas: float = 24
+    ) -> list[ResultadoFollowup]:
+        """Verifica leads inativos e decide reengajar ou escalar cada um.
+
+        Sem gatilho automático dentro de processar_mensagem — ao
+        contrário do agendamento e do resumo, follow-up não é reação a
+        uma mensagem do lead, é o oposto: só faz sentido quando não há
+        mensagem nenhuma. Ainda não há interface para disparar isso; o
+        método fica pronto (mesma decisão já tomada com o agendamento
+        antes de existir tela para ele), a ser chamado pela Etapa 7.
+
+        Quando um lead é escalado, também gera o resumo do corretor —
+        é exatamente o terceiro gatilho já definido para o Summarizer.
+        """
+        resultados = self._followup.processar_inativos(horas=horas)
+
+        for resultado in resultados:
+            for tipo, detalhes in self._followup.eventos_do_resultado(resultado):
+                self._conversas.registrar_evento(
+                    tipo,
+                    lead_id=resultado.lead_id,
+                    **detalhes,
+                )
+
+            if resultado.houve_escalada:
+                self._resumir_lead_escalado(resultado.lead_id)
+
+        return resultados
+
+    def _resumir_lead_escalado(self, lead_id: int) -> None:
+        """Gera e persiste o resumo de um lead recém-escalado.
+
+        Diferente de _resumir_se_necessario() (chamado dentro de um
+        turno, onde a persistência do lead já acontece logo em seguida
+        no fluxo normal), aqui não há mais nenhum ponto adiante que vá
+        persistir o lead — este método precisa fazer isso explicitamente.
+        """
+        lead = self._leads.buscar_por_id(lead_id)
+        if lead is None:
+            return
+
+        resumo = self._resumo.gerar(lead)
+        self._leads.atualizar(lead)
+
+        for tipo, detalhes in self._resumo.eventos_do_resultado(resumo):
+            self._conversas.registrar_evento(tipo, lead_id=lead_id, **detalhes)
 
     # --------------------------------------------------------
     # Consultas para a interface
