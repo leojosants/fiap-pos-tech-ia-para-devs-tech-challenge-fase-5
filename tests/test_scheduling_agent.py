@@ -12,7 +12,7 @@ tests/test_scoring_builder.py):
     validando o único ponto impuro do agente.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -203,7 +203,11 @@ class TestAgendarSePossivel:
             Appointment(
                 lead_id=lead_persistido.id,
                 tipo=AppointmentType.REUNIAO_ONLINE,
-                data_hora=datetime(2026, 8, 21, 15, 0),
+                # datetime.now(), não REFERENCIA: proximo_agendamento_do_lead()
+                # compara contra a hora real do sistema, não contra a
+                # referência injetada — uma data fixa expiraria sozinha
+                # com o passar do tempo real.
+                data_hora=datetime.now() + timedelta(days=2),
             )
         )
         lead_persistido.disponibilidade_reuniao = "sexta de manhã"
@@ -222,7 +226,7 @@ class TestAgendarSePossivel:
             Appointment(
                 lead_id=lead_persistido.id,
                 tipo=AppointmentType.REUNIAO_ONLINE,
-                data_hora=datetime(2026, 8, 21, 15, 0),
+                data_hora=datetime.now() + timedelta(days=2),
             )
         )
         appointment_repo.atualizar_status(confirmado.id, AppointmentStatus.CONFIRMADO)

@@ -15,7 +15,7 @@ ser validado na interface Streamlit ou por quem tiver acesso a
 ranker.py e ao módulo de scoring.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -236,7 +236,10 @@ class TestAgendamentoJaExistente:
             Appointment(
                 lead_id=lead.id,
                 tipo=AppointmentType.REUNIAO_ONLINE,
-                data_hora=datetime(2026, 8, 21, 15, 0),
+                # datetime.now(), não uma data fixa: proximo_agendamento_do_lead()
+                # compara contra a hora real do sistema — ver mesma nota em
+                # test_scheduling_agent.py.
+                data_hora=datetime.now() + timedelta(days=2),
             )
         )
         lead.status = LeadStatus.AGENDADO  # já teria sido setado quando criado
