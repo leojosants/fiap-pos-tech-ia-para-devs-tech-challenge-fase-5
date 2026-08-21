@@ -21,6 +21,21 @@ _SUGESTOES = [
 ]
 
 
+def _escapar_cifrao(texto: str) -> str:
+    """Escapa o caractere '$' antes de renderizar como markdown.
+
+    Sem isso, duas ou mais ocorrências de '$' na mesma mensagem —
+    comum quando a Sofia menciona um valor em R$ mais de uma vez —
+    acionam a renderização de fórmula LaTeX do Streamlit, escondendo
+    parte do texto entre elas. Mesmo bug já documentado e corrigido em
+    property_card.py (ver _moeda_md, e o item 21 de
+    docs/decisoes_tecnicas.md) — aqui aplicado à bolha de chat, que
+    ainda não tinha recebido essa correção. Só afeta a renderização;
+    o texto armazenado (histórico, banco) permanece o original.
+    """
+    return texto.replace("$", "\\$")
+
+
 def _renderizar_sidebar(orquestrador) -> None:
     """Barra lateral com a qualificação e o diagnóstico do sistema."""
     with st.sidebar:
@@ -52,7 +67,7 @@ def _processar_entrada(orquestrador, texto: str) -> None:
             resultado = orquestrador.processar_mensagem(
                 lead_id, conversa_id, texto
             )
-        st.markdown(resultado.resposta)
+        st.markdown(_escapar_cifrao(resultado.resposta))
 
         if resultado.recomendacao and resultado.recomendacao.tem_resultados:
             property_card.renderizar(
@@ -79,7 +94,7 @@ def renderizar() -> None:
     for mensagem in state.get_mensagens():
         avatar = _AVATAR_AGENTE if mensagem["role"] == "assistant" else _AVATAR_LEAD
         with st.chat_message(mensagem["role"], avatar=avatar):
-            st.markdown(mensagem["content"])
+            st.markdown(_escapar_cifrao(mensagem["content"]))
 
     # Os cards da última recomendação permanecem visíveis abaixo do
     # histórico. Redesenhá-los em cada turno passado exigiria armazenar
