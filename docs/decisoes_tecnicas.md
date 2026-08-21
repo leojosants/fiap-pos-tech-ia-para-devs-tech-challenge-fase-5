@@ -1,5 +1,10 @@
 # Decisões Técnicas — CasaLead
 
+> **Uso:** atualizar ao final de cada etapa concluída, junto com
+> `docs/contexto_projeto.md`. Este documento é a base do relatório
+> técnico final — registrar aqui vale mais no momento em que a decisão
+> foi tomada do que tentar reconstituir o raciocínio depois.
+
 Registro das decisões de arquitetura e implementação, com alternativas
 consideradas e justificativas. Base para o relatório técnico final.
 
@@ -105,6 +110,51 @@ consideradas e justificativas. Base para o relatório técnico final.
 | Detalhamento por sinal exposto em `ResultadoScoring` | Só o score final | Torna a priorização auditável para o corretor: mostra exatamente qual sinal pontuou e qual não, em vez de uma caixa-preta |
 | Evento `LEAD_CLASSIFICADO` disparado só quando a temperatura muda | Disparar a cada turno | Evita poluir a trilha de observabilidade com eventos redundantes quando a classificação permanece igual |
 
+## 6d. Agendamento, follow-up e resumo (Etapa 6)
+
+| Decisão | Alternativa descartada | Justificativa |
+| --- | --- | --- |
+| Interpretação de disponibilidade por regras determinísticas | LLM (reaproveitando `extrair_json`) | Mesmo princípio já aplicado no projeto inteiro: o que pode ser determinístico não vai ao modelo. Zero custo, zero dependência nova, testável sem banco nem API |
+| Interpretação de disponibilidade por regras determinísticas | Biblioteca de parsing de datas (`dateparser`) | Nova dependência de deploy, e reduz a explicabilidade da decisão na defesa técnica ("por que o parser leu isso assim?") |
+| Fallback para `texto_turno` na interpretação | Só `disponibilidade_reuniao` | `QualificationAgent` só grava esse slot uma vez (campo já preenchido não é sobrescrito); sem o fallback, uma resposta do lead a uma sugestão de horário anterior nunca viraria um agendamento |
+| Sugestões geradas por regra fixa (2 dias úteis × 2 horários) | Consulta a calendário real | Não há integração de agenda real do corretor nesta POC; a regra é previsível e auditável, mesmo espírito do cabeçalho determinístico dos cards de imóveis |
+| Nomes de dia da semana sem `strftime("%A")` | `strftime` com locale do sistema | Depende de configuração regional (Windows local vs. container do Streamlit Cloud); tupla fixa em português elimina a variável |
+| Normalização de acentos + casamento por palavra inteira | Comparação direta por substring (`in`) | "manhã" é substring literal de "amanhã" — bug real encontrado pelo teste (ver Bugs, item 24); corrigido com `unicodedata` + `\b` |
+| Sem checagem de conflito de horário | Modelar agenda do corretor | Fora do escopo de uma POC; registrado como limitação (item 32), não como lacuna silenciosa |
+| Contexto de agendamento injetado só quando algo muda no turno | Injetar sempre que há um compromisso ativo | A Sofia repetiria a confirmação a cada mensagem — soaria robótico. `ja_existia=True` naturalmente não ativa `houve_agendamento`, então o bloco fica vazio sem lógica extra |
+| Exceção à regra de não prometer horário, condicionada ao bloco literal | Liberação geral da regra | O LLM só pode confirmar data porque o sistema entregou pronta (`COMPROMISSO CONFIRMADO NESTE TURNO`), nunca por inferência própria. Um teste amarra o nome do bloco entre `scheduling_agent.py` e `prompts.py`, para os dois nunca divergirem silenciosamente |
+| Mensagem de follow-up por template, não LLM | Chamada ao modelo a cada verificação | É uma mensagem proativa de background, não resposta a um turno — gastar uma chamada de API (e precisar de fallback para modo demo) seria desproporcional |
+| Verificação de follow-up via checagem sob demanda (event-driven) | Worker/scheduler real em background | Streamlit não tem processo de background nativo; a verificação roda quando algo a aciona (rerun da UI, ou chamada explícita) — limitação documentada (item 33), não simulação disfarçada de real |
+| `MAX_TENTATIVAS = 2` antes de escalar | Número maior, ou configurável | Redondo, fácil de justificar e de demonstrar sem esperar muito tempo |
+| Escalada altera só `ConversationStatus`, não `LeadStatus` | Reaproveitar `LeadStatus.ENCAMINHADO` | Esse status já tem outro sentido (encaminhamento a especialista de investimento); misturar os dois confundiria a leitura do funil |
+| Escalada chama `ConversationRepository` diretamente | Reaproveitar `Orchestrator.encerrar_conversa()` | Criaria dependência circular — o orquestrador é quem depende do `followup_manager`, não o contrário. `encerrar_conversa()` internamente é uma linha só; chamar o mesmo primitivo direto não duplica lógica |
+| Resumo via `GroqClient.resumir()` (`model_smart`) | Novo método no cliente | O método já existia, feito sob medida para isso ("usado no resumo para o corretor") — descoberto ao ler o arquivo real antes de implementar |
+| Resumo degrada para template estruturado, não texto fingindo prosa de IA | Tentar imitar um resumo em prosa por regras | Honestidade sobre a capacidade real disponível no modo demo; o template reaproveita `montar_conteudo_resumo()`, então não duplica lógica de formatação |
+| Gatilho do resumo: lead fica quente OU agendamento confirmado | Gerar a cada turno | Custo de LLM sem benefício — o corretor não precisa de um resumo novo a cada mensagem trocada. Só dispara na transição de estado, não quando a condição já valia |
+| `AppointmentRepository` compartilhado entre `SchedulingAgent` e `Summarizer` | Uma instância por agente | Repositório é stateless por chamada (abre/fecha conexão a cada método); nenhum motivo para duplicar o objeto |
+| `_TIPOS_LEGIVEIS` duplicado em `scheduling_agent.py` e `summarizer.py` | Importar o dicionário privado de um módulo no outro | Três entradas; acoplar a um símbolo privado (`_`) de outro módulo custaria mais do que a duplicação. Registrado como limitação (item 35), não decisão silenciosa |
+
+## 6e. Validação manual e correções pós-teste (Etapa 6)
+
+Depois da suíte automatizada (215 testes) fechar, a Etapa 6 passou por
+validação manual completa na interface real — algo que os testes
+automatizados, por desenho, não cobrem (renderização visual,
+encadeamento de duas falhas de LLM no mesmo turno, comportamento contra
+banco de produção real). Essa rodada encontrou 5 problemas reais que
+nenhum teste automatizado pegaria.
+
+| Decisão | Alternativa descartada | Justificativa |
+| --- | --- | --- |
+| Contexto da última pergunta do agente (`ultima_pergunta_agente`) passado à extração por LLM | Pedir ao lead que sempre repita a palavra-chave (ex.: "2 quartos", nunca só "2") | Não é justo esperar que o cliente saiba o "formato certo"; o problema é a IA não ter contexto que já teria condição de usar, não o cliente formular errado |
+| Correção do contexto de extração restrita ao caminho LLM | Também ensinar o motor determinístico (regex) a usar esse contexto | O motor determinístico é uma rede de segurança sem compreensão de linguagem por desenho; dar a ele essa capacidade duplicaria, em regras, o que o LLM já faz — é o oposto do princípio "o que pode ser determinístico não vai ao LLM": aqui, o que exige compreensão não deveria estar no motor de regras |
+| Encerramento não promete mais contato ativo da equipe | Adicionar um slot de telefone/e-mail ao roteiro (coleta explícita) | `Lead.telefone`/`Lead.email` existem no modelo mas nunca são preenchidos em nenhum ponto do sistema — nem regex, nem LLM, nem o roteiro pedem. A promessa "um corretor entra em contato" não tinha como ser cumprida. Coletar contato é escopo maior (mexe em vários arquivos, levanta questão de LGPD) para um requisito que nem está no enunciado; ajustar o texto de encerramento resolve o risco de inconsistência na defesa com custo mínimo |
+| `_escapar_cifrao()` aplicado à bolha de chat | Deixar como estava (só o card de imóvel tinha a correção) | Mesma causa raiz do bug já corrigido (item 21): duas ocorrências de `$` no texto acionam renderização LaTeX do Streamlit e escondem parte da mensagem. A bolha de chat nunca tinha recebido essa correção porque o bug só apareceu quando o LLM mencionou "R$" mais de uma vez na mesma fala — algo que só surgiu em teste manual, não nos testes automatizados (que não renderizam markdown de verdade) |
+| Datas de teste fixas trocadas por `datetime.now() + timedelta(...)` | Manter datas absolutas "no futuro" | `AppointmentRepository.proximo_agendamento_do_lead()` compara contra `datetime.now()` real, não contra o `REFERENCIA` injetado nos testes — uma data absoluta (`2026-08-21`) expira sozinha quando o relógio real a alcança. Descoberto porque o relógio real alcançou exatamente essa data durante a sessão de testes |
+| `PropertyRanker` passa a reaproveitar `self._imoveis` (já parametrizado com `db_path`) | Manter `PropertyRanker()` sem argumento | Inconsistência pré-existente (Etapa 4): todo outro repositório em `Orchestrator.__init__` respeita `db_path` customizado, só o ranker não. Inofensivo em produção (Streamlit sempre usa o banco padrão), mas quebrava a isolação prometida por scripts de validação com banco próprio |
+| Repetição de pergunta com as 2 opções do motor determinístico | Adicionar memória de "última pergunta usada" por slot | Evento raro e composto (exige duas quedas consecutivas pro fallback no mesmo slot pendente); baixo impacto (não perde dado, pergunta ainda faz sentido); registrado como limitação (item 39) em vez de correção, para não abrir superfície nova num componente que é deliberadamente "burro e seguro" |
+| Investigação de taxa de fallback do `model_fast` adiada | Migrar para outro provedor (ex.: NVIDIA NIM) imediatamente | Duas hipóteses não distinguidas ainda: causa é o modelo (`openai/gpt-oss-20b`, com quirk documentado de tentar tool calls) ou é o provedor (Groq). Migrar de provedor é esforço grande (reescrever `groq_client.py`, revalidar toda a suíte de degradação) para um problema cuja causa raiz não está isolada. Experimento de baixo custo proposto para o futuro: trocar `model_fast` por outro modelo já disponível no Groq antes de considerar troca de provedor |
+| Entrada por voz (Voice AI) avaliada e adiada deliberadamente | Implementar agora, já que é tecnicamente barato (Groq Whisper + `st.audio_input` nativo do Streamlit) | Mesma decisão de escopo já tomada no início do projeto, só que pela porta de entrada em vez da saída; "barato" não muda o mérito de manter o escopo fechado enquanto a Etapa 6 está em validação. Fica registrado como opção viável para decisão futura deliberada |
+
 ## 7. Interface
 
 | Decisão | Alternativa descartada | Justificativa |
@@ -146,6 +196,13 @@ no processo.
 | 21 | `R$` exibido como `R\`` no expander | Streamlit interpreta `$` como delimitador LaTeX em markdown | Duas funções de formatação: com escape para markdown, sem escape para `st.metric` |
 | 22 | Agente listava códigos e bairros dos imóveis em texto | Instrução proibia "preço e características", mas não códigos | Proibição explícita de códigos, bairros e listagem |
 | 23 | Erro 400 `tool_use_failed` | O modelo tenta chamadas de ferramenta não solicitadas | `tool_choice: none` explícito + retentativa para esse erro específico |
+| 24 | `"amanhã"` interpretado com horário de manhã mesmo sem período explícito | `"manhã" in texto` casava como substring dentro de `"amanhã"` (a-**manhã**) | Normalização de acentos (`unicodedata`) + casamento por palavra inteira (`\b...\b`) em vez de `in` |
+| 25 | `TypeError: registrar_evento() got multiple values for argument 'tipo'` ao registrar `AGENDAMENTO_CRIADO` | O dicionário de detalhes do `scheduling_agent` tinha uma chave `"tipo"` (tipo do compromisso), colidindo com o parâmetro posicional `tipo` de `registrar_evento()` (tipo do evento) | Chave renomeada para `"tipo_compromisso"`; só apareceu no primeiro teste que exercitou a chamada real contra `ConversationRepository`, não nos testes unitários do agente isolado |
+| 26 | "2" sozinho não preenchia `quartos_desejados`, mesmo respondendo diretamente "Quantos quartos você precisa?" | Regex exige a palavra "quartos" junto ao número; a extração por LLM manda só o texto da mensagem atual, sem saber a que pergunta ela responde — com "nunca deduza" no prompt, o modelo corretamente se recusa a adivinhar | `QualificationAgent` passa a receber a última pergunta do agente como contexto opcional (`ultima_pergunta_agente`), incluída no conteúdo enviado ao modelo só para desambiguar, nunca para extrair dado dela |
+| 27 | Mensagens da Sofia cortando no meio quando mencionavam "R$" mais de uma vez | Mesma causa do item 21, mas na bolha de chat (`page_chat.py`), que nunca tinha recebido a correção — só o card de imóvel tinha | `_escapar_cifrao()` aplicado nos dois pontos de `st.markdown()` da conversa (fala ao vivo e histórico redesenhado) |
+| 28 | Três testes de `scheduling_agent`/`orchestrator` começaram a falhar sozinhos, sem nenhuma mudança de código | Data absoluta fixa (`datetime(2026, 8, 21, 15, 0)`) usada para simular "agendamento no futuro"; o relógio real alcançou essa data durante a sessão de testes, e `proximo_agendamento_do_lead()` compara contra `datetime.now()` real, não contra a `REFERENCIA` injetada | Datas trocadas por `datetime.now() + timedelta(days=2)`, que nunca expira |
+| 29 | Scripts de validação com banco próprio liam, sem saber, do banco padrão `casalead.db` para os imóveis | `Orchestrator.__init__` tinha `self._ranker = PropertyRanker()` sem repassar `db_path`, diferente de todos os outros repositórios do mesmo `__init__` | `PropertyRanker(self._imoveis)`, reaproveitando a instância já parametrizada corretamente |
+| 30 | Encerramento da conversa prometia contato ativo ("um corretor entra em contato em breve") que o sistema não tem como cumprir | `Lead.telefone`/`Lead.email` existem no modelo mas nenhum ponto do sistema (regex, LLM, roteiro) jamais os coleta | Texto de encerramento ajustado (determinístico e instrução do LLM) para não prometer contato ativo — "informações registradas com a equipe", sem afirmar que alguém vai ligar ou escrever |
 
 ---
 
@@ -194,6 +251,19 @@ no processo.
 | 28 | Sinal de orçamento não gradua o quanto o valor declarado está acima ou abaixo da faixa mínima da zona; verifica apenas viabilidade binária | `scoring/rules.py` |
 | 29 | Sinal de intenção identificada não distingue se houve necessidade de confirmação explícita durante a conversa — esse dado não é persistido no domínio | `scoring/rules.py` |
 | 30 | Cortes de temperatura (70/40) são constantes fixas, não calibradas por dados reais de conversão | `scoring/rules.py` |
+| 31 | Vocabulário de interpretação de datas é fechado — não reconhece "semana que vem", "dia 20", "daqui a 3 dias" | `agents/scheduling_agent.py` |
+| 32 | Sem checagem de conflito de horário — não modela agenda real de corretor nesta POC | `agents/scheduling_agent.py` |
+| 33 | Verificação de follow-up não roda em background de verdade; precisa ser chamada explicitamente (sem worker/scheduler nativo no Streamlit) | `followup/followup_manager.py`, `agents/orchestrator.py` |
+| 34 | Escalada por follow-up altera apenas `ConversationStatus`, não `LeadStatus` — leitura futura que cruze os dois campos sem essa ressalva pode confundir | `agents/orchestrator.py` |
+| 35 | `_TIPOS_LEGIVEIS` (rótulos de `AppointmentType`) duplicado em dois módulos — trade-off consciente para não acoplar a um símbolo privado de outro módulo | `agents/scheduling_agent.py`, `reporting/summarizer.py` |
+| 36 | Threshold de inatividade do follow-up (`horas`) não é lido de variável de ambiente — sem atalho de `DEMO_MODE` para acelerar a demonstração | `followup/followup_manager.py`, `agents/orchestrator.py` |
+| 37 | `executar_verificacao_followup()` não tem gatilho de UI ainda — método pronto, sem botão ou rotina que o acione | `agents/orchestrator.py` |
+| 38 | Texto de resposta com "cara" de agendamento (dia da semana + período do dia) pode ser capturado como `disponibilidade_reuniao` mesmo quando respondia à pergunta de prazo (`urgencia`) — o regex vence sem saber a que pergunta o texto respondia | `agents/qualification_agent.py` |
+| 39 | Motor determinístico pode repetir a mesma pergunta (de duas opções) em quedas consecutivas para o mesmo slot pendente — sem memória da última escolhida | `llm/demo_engine.py` |
+| 40 | Taxa de fallback do `model_fast` (`openai/gpt-oss-20b`) observada como alta em sessão extensa de teste manual (múltiplas ocorrências ao longo de ~30 turnos); causa raiz não isolada — pode ser o modelo ou o provedor. Contagem exata não confiável por reinícios de servidor terem zerado o log visível repetidas vezes durante a sessão | `llm/groq_client.py`, `.env` (`GROQ_MODEL_FAST`) |
+| 41 | Quando a chamada ao LLM devolve sucesso com conteúdo vazio (não uma exceção), nenhum detalhe fica registrado para diagnóstico — `resposta.erro` fica em branco nesse caso, diferente de uma falha por exceção (que já é logada com detalhe em `_chamar()`) | `llm/groq_client.py`, `agents/conversation_agent.py` |
+| 42 | Nenhum campo de contato (telefone/e-mail) é coletado em nenhum momento da conversa, em nenhum dos dois cenários (compra/aluguel/investimento) — decisão consciente registrada (ver seção 6e), não lacuna esquecida | `core/models.py`, `agents/qualification_agent.py` |
+| 43 | Entrada por voz (Voice AI) avaliada tecnicamente como viável (Groq Whisper + `st.audio_input`), mas deliberadamente fora do escopo atual | `ui/page_chat.py` (não implementado) |
 
 ---
 
@@ -206,3 +276,5 @@ no processo.
 | Taxa de sucesso das chamadas | 100% em condições normais |
 | Tokens por conversa completa (5 turnos) | ~8.000 entrada / ~2.900 saída |
 | Custo estimado por conversa | ~US$ 0,002 |
+
+**Validação manual concluída (Etapa 6):** conversa real na interface cobrindo os cenários 3.1 (compra e aluguel, ciclo completo) e 3.2 (investimento, ciclo completo), os três blocos de agendamento (horário interpretável, disponibilidade vaga com sugestões, não duplicação), e a correção do texto de encerramento nos dois caminhos (LLM e determinístico). Follow-up e resumo — que não têm nenhuma representação visual na tela ainda (pendência 37) — foram validados por script contra o banco de produção real (`scripts/validar_followup_producao.py`), não um banco isolado: ciclo completo de 1ª tentativa → 2ª tentativa → escalada → resumo automático, com `GroqClient` real. Cinco bugs reais foram encontrados e corrigidos nessa rodada (itens 26–30), nenhum deles detectável pelos testes automatizados por natureza (renderização visual, relógio real, encadeamento de duas falhas de LLM no mesmo turno). Métricas de latência/custo específicas da Etapa 6 não foram medidas com rigor numérico — o achado quantificável desta rodada foi a taxa de fallback do `model_fast`, registrada como observação (item 40), não como medição precisa.
