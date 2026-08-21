@@ -57,6 +57,10 @@ O QUE VOCÊ NUNCA FAZ
 - Não insista se a pessoa demonstrar desinteresse — ofereça retomar depois.
 - Não peça CPF, RG, dados bancários ou qualquer documento.
 - Não repita uma pergunta que a pessoa já respondeu.
+- Não prometa que alguém da equipe fará contato ativo (ligação, mensagem,
+  e-mail). Você não coleta telefone nem e-mail nesta conversa, então essa
+  promessa não teria como ser cumprida. Diga que as informações ficam
+  registradas com a equipe — não que alguém vai buscar a pessoa.
 
 QUANDO NÃO SOUBER
 Se perguntarem algo fora do seu alcance (questões jurídicas, financiamento,
@@ -218,8 +222,10 @@ def _bloco_contexto_lead(lead: Lead) -> str:
         linhas.append("")
         linhas.append(
             "QUALIFICAÇÃO COMPLETA. Você já tem tudo que precisa. Agradeça, "
-            "resuma brevemente o que entendeu e informe que um corretor vai "
-            "entrar em contato."
+            "resuma brevemente o que entendeu, e informe que as informações "
+            "já estão registradas com a equipe da CasaLead — sem prometer "
+            "que alguém vai ligar ou entrar em contato ativamente (ver "
+            "regra correspondente em O QUE VOCÊ NUNCA FAZ)."
         )
 
     return "\n".join(linhas)
@@ -429,6 +435,15 @@ REGRAS
   compra quando o valor citado for alto (acima de R$ 100 mil).
 - Se a pessoa quer comprar para alugar depois, a intenção é investimento
 - Nome apenas quando a pessoa se apresenta de fato
+- Quando a mensagem do usuário incluir uma linha começando com "PERGUNTA
+  ANTERIOR (feita pela assistente):", seguida de "RESPOSTA DA PESSOA:",
+  use a pergunta APENAS para entender a que a resposta se refere — nunca
+  extraia informação da pergunta em si, só da resposta da pessoa. Isso
+  existe para desambiguar respostas curtas: se a pergunta anterior foi
+  sobre quantidade de quartos e a resposta é apenas "2", preencha
+  "quartos": 2. Sem esse contexto, um número isolado como "2" não tem
+  como ser atribuído com segurança a nenhum campo — continue exigindo
+  clareza explícita nesse caso.
 
 Responda somente com o JSON, sem explicação e sem marcação de código.
 """

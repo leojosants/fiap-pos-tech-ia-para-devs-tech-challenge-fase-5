@@ -124,9 +124,28 @@ class QualificationAgent:
     # Etapa 2 — extração por modelo
     # --------------------------------------------------------
 
-    def _extrair_por_llm(self, texto: str) -> tuple[dict, int]:
-        """Solicita ao modelo a extração estruturada. Falha não propaga."""
-        dados, resposta = self._cliente.extrair_json(PROMPT_EXTRACAO, texto)
+    def _extrair_por_llm(
+        self, texto: str, ultima_pergunta_agente: str = ""
+    ) -> tuple[dict, int]:
+        """Solicita ao modelo a extração estruturada. Falha não propaga.
+
+        Quando `ultima_pergunta_agente` é informada, ela é incluída como
+        contexto adicional — não para o modelo extrair dados dela, mas
+        para desambiguar respostas curtas do lead. Sem isso, uma resposta
+        como "2" a "quantos quartos você precisa?" chega ao modelo como
+        uma string isolada, sem relação visível com nenhum campo — e a
+        própria regra do prompt de "nunca deduzir" faz o modelo, com
+        razão, devolver null. Ver docs/decisoes_tecnicas.md, seção 6d.
+        """
+        conteudo = texto
+        if ultima_pergunta_agente:
+            conteudo = (
+                f"PERGUNTA ANTERIOR (feita pela assistente): "
+                f"{ultima_pergunta_agente}\n"
+                f"RESPOSTA DA PESSOA: {texto}"
+            )
+
+        dados, resposta = self._cliente.extrair_json(PROMPT_EXTRACAO, conteudo)
         if not dados:
             logger.info("Extração via LLM indisponível: %s", resposta.erro)
             return {}, resposta.latencia_ms
@@ -256,12 +275,20 @@ class QualificationAgent:
     # --------------------------------------------------------
 
     def qualificar(
-        self, lead: Lead, texto: str, *, forcar_llm: bool = False
+        self,
+        lead: Lead,
+        texto: str,
+        *,
+        forcar_llm: bool = False,
+        ultima_pergunta_agente: str = "",
     ) -> ResultadoQualificacao:
         """Processa uma mensagem e atualiza o lead com o que foi extraído.
 
         A chamada ao modelo é evitada quando os padrões já capturaram tudo
         que faltava, reduzindo custo e latência sem perda de qualidade.
+
+        `ultima_pergunta_agente` é opcional e só afeta o caminho por LLM —
+        ver `_extrair_por_llm`.
         """
         resultado = ResultadoQualificacao()
 
@@ -272,7 +299,9 @@ class QualificationAgent:
         por_llm: dict = {}
         if forcar_llm or not (cobriu_tudo and por_padroes):
             if not self._cliente._settings.modo_demo:
-                dados, latencia = self._extrair_por_llm(texto)
+                dados, latencia = self._extrair_por_llm(
+                    texto, ultima_pergunta_agente
+                )
                 resultado.latencia_ms = latencia
                 if dados:
                     por_llm = self._normalizar_llm(dados, lead)

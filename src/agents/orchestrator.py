@@ -206,7 +206,10 @@ class Orchestrator:
 
         # [2] Qualificar
         intent_antes = lead.intent
-        qualificacao = self._qualificacao.qualificar(lead, texto)
+        ultima_pergunta = self._ultima_pergunta_agente(conversation_id)
+        qualificacao = self._qualificacao.qualificar(
+            lead, texto, ultima_pergunta_agente=ultima_pergunta
+        )
 
         precisa_confirmar = self._deve_confirmar_intencao(
             intent_antes, lead.intent, texto, qualificacao
@@ -307,6 +310,21 @@ class Orchestrator:
     # --------------------------------------------------------
     # Confirmação de intenção ambígua
     # --------------------------------------------------------
+
+    def _ultima_pergunta_agente(self, conversation_id: int) -> str:
+        """Última fala da Sofia antes da mensagem atual do lead.
+
+        Dá contexto à extração por LLM (QualificationAgent), para
+        desambiguar respostas curtas — "2" sozinho só é interpretável
+        como quantidade de quartos se soubermos que essa foi a pergunta.
+        Vazio no primeiro turno real (só existe a saudação até então) ou
+        se, por algum motivo, não houver mensagem do agente ainda.
+        """
+        mensagens = self._conversas.listar_mensagens(conversation_id, limite=5)
+        for mensagem in reversed(mensagens):
+            if mensagem.role == MessageRole.AGENT:
+                return mensagem.content
+        return ""
 
     @staticmethod
     def _deve_confirmar_intencao(

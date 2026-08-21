@@ -318,8 +318,8 @@ _PERGUNTA_INTENCAO = [
 ]
 
 _ENCERRAMENTO = (
-    "Perfeito, tenho tudo que preciso! Vou passar suas informações para "
-    "um dos nossos corretores, que entra em contato em breve. Obrigada!"
+    "Perfeito, tenho tudo que preciso! Já deixei suas informações "
+    "registradas com a nossa equipe. Obrigada!"
 )
 
 
@@ -440,4 +440,3 @@ class DemoEngine:
             lead.preco_max is not None,
         )
         return sum(sinais) >= 2
-    
