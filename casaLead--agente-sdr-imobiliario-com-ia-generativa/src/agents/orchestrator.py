@@ -109,9 +109,55 @@ class Orchestrator:
         self._agendamentos_repo = AppointmentRepository(db_path)
         self._agendamento = SchedulingAgent(self._agendamentos_repo)
         self._resumo = Summarizer(self._cliente, self._agendamentos_repo)
+
+        # Mesmo raciocínio do AppointmentRepository acima: guardado aqui
+        # para ser compartilhado com o FollowupManager e, agora, também
+        # exposto como propriedade pública (ver seção "Consultas para a
+        # interface") — o dashboard e a página do corretor (Etapa 7)
+        # precisam consultar estatísticas de follow-up sem duplicar a
+        # instância.
+        self._followups_repo = FollowupRepository(db_path)
         self._followup = FollowupManager(
-            FollowupRepository(db_path), self._conversas, self._leads
+            self._followups_repo, self._conversas, self._leads
         )
+
+    # --------------------------------------------------------
+    # Consultas para a interface — leitura pública dos repositórios
+    # --------------------------------------------------------
+    #
+    # O orquestrador é a única porta de entrada do domínio (ver
+    # docstring do módulo), mas até a Etapa 6 isso só valia para
+    # escrita: consultas de leitura vinham de acesso direto a atributo
+    # privado (ex.: page_chat.py chamava orquestrador._leads), o que
+    # a documentação já registrava como pendência de encapsulamento.
+    # Estas propriedades resolvem isso: somente leitura (sem setter),
+    # devolvem os repositórios já instanciados — quem consome decide o
+    # que consultar, sem o orquestrador precisar antecipar cada método
+    # de agregação que o dashboard vai querer usar.
+
+    @property
+    def leads(self) -> LeadRepository:
+        return self._leads
+
+    @property
+    def conversas(self) -> ConversationRepository:
+        return self._conversas
+
+    @property
+    def imoveis(self) -> PropertyRepository:
+        return self._imoveis
+
+    @property
+    def agendamentos(self) -> AppointmentRepository:
+        return self._agendamentos_repo
+
+    @property
+    def followups(self) -> FollowupRepository:
+        return self._followups_repo
+
+    @property
+    def cliente(self) -> GroqClient:
+        return self._cliente
 
     # --------------------------------------------------------
     # Abertura de atendimento

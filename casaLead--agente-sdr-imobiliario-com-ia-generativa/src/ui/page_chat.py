@@ -41,7 +41,7 @@ def _renderizar_sidebar(orquestrador) -> None:
     with st.sidebar:
         if state.atendimento_iniciado():
             lead_id, _ = state.get_ids()
-            lead = orquestrador._leads.buscar_por_id(lead_id)
+            lead = orquestrador.leads.buscar_por_id(lead_id)
             if lead:
                 qualification_panel.renderizar(lead, state.get_ultimo_turno())
 
