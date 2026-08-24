@@ -1,0 +1,8 @@
+# Normaliza finais de linha: LF no repositório, nativo no working copy
+* text=auto eol=lf
+
+# Arquivos binários — nunca converter
+*.db     binary
+*.png    binary
+*.jpg    binary
+*.pdf    binary
