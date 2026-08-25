@@ -43,7 +43,7 @@ _PADROES_ZONA = {
 
 _BAIRROS_CONHECIDOS = {
     "moema": "Moema",
-    "vila olímpica": "Vila Olímpia",
+    "vila olímpia": "Vila Olímpia",
     "vila olimpia": "Vila Olímpia",
     "saúde": "Saúde",
     "saude": "Saúde",
