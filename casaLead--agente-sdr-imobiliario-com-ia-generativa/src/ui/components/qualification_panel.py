@@ -60,6 +60,13 @@ def renderizar(lead: Lead, ultimo_turno=None) -> None:
 
     st.caption(f"Intenção: **{_ROTULO_INTENCAO[lead.intent]}**")
 
+    emoji_temperatura = _CORES_TEMPERATURA[lead.temperature]
+    st.caption(
+        f"Prioridade: {emoji_temperatura} "
+        f"**{str(lead.temperature).capitalize()}** · "
+        f"Score: **{lead.score}**/100"
+    )
+
     completude = lead.completude()
     st.progress(completude, text=f"{round(completude * 100)}% concluído")
 
