@@ -155,6 +155,46 @@ nenhum teste automatizado pegaria.
 | Investigação de taxa de fallback do `model_fast` adiada | Migrar para outro provedor (ex.: NVIDIA NIM) imediatamente | Duas hipóteses não distinguidas ainda: causa é o modelo (`openai/gpt-oss-20b`, com quirk documentado de tentar tool calls) ou é o provedor (Groq). Migrar de provedor é esforço grande (reescrever `groq_client.py`, revalidar toda a suíte de degradação) para um problema cuja causa raiz não está isolada. Experimento de baixo custo proposto para o futuro: trocar `model_fast` por outro modelo já disponível no Groq antes de considerar troca de provedor |
 | Entrada por voz (Voice AI) avaliada e adiada deliberadamente | Implementar agora, já que é tecnicamente barato (Groq Whisper + `st.audio_input` nativo do Streamlit) | Mesma decisão de escopo já tomada no início do projeto, só que pela porta de entrada em vez da saída; "barato" não muda o mérito de manter o escopo fechado enquanto a Etapa 6 está em validação. Fica registrado como opção viável para decisão futura deliberada |
 
+## 6f. Dashboard e observabilidade (Etapa 7)
+
+| Decisão | Alternativa descartada | Justificativa |
+| --- | --- | --- |
+| Propriedades públicas de leitura no `Orchestrator` (`leads`, `conversas`, `imoveis`, `agendamentos`, `followups`, `cliente`) | Páginas novas instanciando repositórios próprios, duplicando a conexão ao mesmo banco | Duas instâncias de repositório apontando para o mesmo banco, por caminhos de código diferentes, é exatamente o tipo de escolha que a banca costuma questionar ("por que dois lugares acessam o banco?"); o custo de expor `@property` somente-leitura é baixo |
+| `FollowupRepository` guardado como atributo próprio do `Orchestrator` (`self._followups_repo`), compartilhado com o `FollowupManager` | Manter criado inline dentro do construtor do `FollowupManager`, inacessível de fora | Sem isso, a propriedade pública `orquestrador.followups` teria que devolver uma segunda instância desalinhada da usada internamente, ou acessar `self._followup._followups` (atributo privado de outro objeto) — trocaria um encapsulamento quebrado por outro |
+| Filtro de leads vazios feito em Python, reaproveitando `Lead.completude()`/`Lead.intent` | Reimplementar o critério em SQL dentro de `LeadRepository.estatisticas()` | Duplicaria em SQL uma regra que já existe como método de domínio — mesma decisão já firmada para o scoring (seção 6c): a regra de completude vive em um só lugar |
+| `funil_de_leads()` busca via `LeadRepository.listar()` e agrega em Python, em vez de estender o SQL de `estatisticas()` | Alterar `estatisticas()` (já testado) para aceitar um filtro opcional | Mantém o método já testado intocado; evita duas implementações da mesma agregação (uma em SQL, uma em Python) que podem divergir com o tempo. Aceitável na escala de uma POC (dezenas de leads) |
+| Gráficos com `pandas.Series` + `st.bar_chart`, sem declarar `pandas` como dependência direta | Adicionar `pandas` explicitamente ao `pyproject.toml` | `pandas` já é dependência obrigatória do `streamlit` (não opcional — usado internamente por praticamente todo componente de dado/gráfico); declarar de novo seria redundante |
+| Dicionários de rótulo em português duplicados localmente em `page_dashboard.py` e `page_broker.py` | Importar de `qualification_panel.py` ou de um módulo compartilhado novo | Mesmo padrão já escolhido conscientemente pelo projeto para `_TIPOS_LEGIVEIS` (item 35 das limitações): poucas entradas custam menos duplicadas do que acopladas a um símbolo privado de outro módulo |
+| `st.navigation`/`st.Page` para a navegação multipágina | `st.sidebar.radio` trocando conteúdo dentro de um único `main.py` | Mecanismo nativo do Streamlit desde a 1.36; gera URL própria por página, útil na demonstração para a banca e no relatório técnico (dá para linkar uma página específica) |
+| Funções wrapper em `main.py` para as páginas que recebem o orquestrador por injeção | Mudar a assinatura de `page_dashboard.renderizar()`/`page_broker.renderizar()` para não receberem argumento | `st.Page` exige uma função sem argumentos; mudar a assinatura reabriria dois arquivos já commitados só por causa de uma exigência de outro módulo — três funções pequenas em `main.py` resolvem sem tocar no que já estava fechado |
+| Threshold de follow-up com dois controles: campo numérico (padrão 24h) + atalho de 1 minuto em modo demo | Só o campo numérico de horas | Resolve uma dor real já registrada (esperar 24h de verdade para demonstrar o follow-up) sem abrir mão do comportamento correto de produção; o atalho só aparece quando `Orchestrator.diagnostico()["modo"] == "demonstrativo"` |
+| `_resumir_resultados()` e `_serie()` extraídos como funções puras, testáveis sem Streamlit | Deixar a lógica de contagem/formatação misturada com as chamadas `st.*` | Mesmo padrão já usado para `_escapar_cifrao()` (Etapa 6, pós-validação manual): só a lógica pura de um módulo de UI é testável de forma automatizada; extrair aumenta a cobertura sem custo real |
+
+## 6g. Reorganização de pastas e validação manual (Etapa 7)
+
+Depois da suíte automatizada (250 testes) fechar, a Etapa 7 passou por
+validação manual completa na interface real, e por uma reorganização de
+pastas decidida pelo aluno no meio do processo (não fazia parte do
+escopo técnico original desta etapa). Diferente da Etapa 6 (5 bugs de
+código encontrados na validação manual, itens 26–30), **a validação
+manual da Etapa 7 não encontrou nenhum bug de código** — o único
+incidente da etapa foi de processo, não de lógica.
+
+| Decisão | Alternativa descartada | Justificativa |
+| --- | --- | --- |
+| Código movido para dentro de `casaLead--agente-sdr-imobiliario-com-ia-generativa/`, `README.md` mantido na raiz | Manter tudo na raiz do repositório (nome técnico herdado do Tech Challenge Fase 4) | GitHub só renderiza automaticamente como página inicial o `README.md` que está na raiz; a subpasta dá um nome de produto ao código sem perder isso |
+| Movimentação com `git mv`, em vez de mover no Explorer e só depois `git add -A` | Mover manualmente e deixar o Git tentar detectar o rename sozinho | `git mv` apenas automatiza `mv` + `git add`; mover primeiro fora do controle do Git e só depois rodar `git add -A` arriscou (e chegou a acontecer, ver limitação abaixo) o Git não conseguir parear corretamente arquivos idênticos vazios (`__init__.py`), perdendo parte do histórico de linha a linha nesses casos específicos |
+| `.venv` descartado e recriado (`uv sync`) no novo local, em vez de movido junto com o resto | Mover a pasta `.venv` junto | Os executáveis dentro de `.venv\Scripts\` no Windows guardam caminho absoluto para o Python real; mover a pasta não corrige esses caminhos — confirmado na prática pelo erro `uv trampoline failed to canonicalize script path` |
+| Correção de arquivos trocados entregue como arquivo de download completo, não bloco de código colado | Pedir para colar de novo em bloco de código no chat | Reduz o risco de o mesmo erro de cópia (colar no arquivo errado, entre dois abertos simultaneamente no editor) se repetir; o caminho exato de cada arquivo fica inequívoco no nome do download |
+
+**Achado operacional confirmado (não um bug):** o servidor Streamlit
+precisa de restart completo (`Ctrl+C`, aguardar encerrar, subir de
+novo) — não basta um refresh do navegador — para que uma mudança de
+código seja de fato exibida. A regra já estava registrada em
+`docs/contexto_projeto.md` (seção 2) desde etapas anteriores; a Etapa 7
+apenas confirmou isso na prática, ao investigar por que a exibição de
+score/temperatura não aparecia mesmo com o código e os testes corretos.
+
 ## 7. Interface
 
 | Decisão | Alternativa descartada | Justificativa |
@@ -264,6 +304,9 @@ no processo.
 | 41 | Quando a chamada ao LLM devolve sucesso com conteúdo vazio (não uma exceção), nenhum detalhe fica registrado para diagnóstico — `resposta.erro` fica em branco nesse caso, diferente de uma falha por exceção (que já é logada com detalhe em `_chamar()`) | `llm/groq_client.py`, `agents/conversation_agent.py` |
 | 42 | Nenhum campo de contato (telefone/e-mail) é coletado em nenhum momento da conversa, em nenhum dos dois cenários (compra/aluguel/investimento) — decisão consciente registrada (ver seção 6e), não lacuna esquecida | `core/models.py`, `agents/qualification_agent.py` |
 | 43 | Entrada por voz (Voice AI) avaliada tecnicamente como viável (Groq Whisper + `st.audio_input`), mas deliberadamente fora do escopo atual | `ui/page_chat.py` (não implementado) |
+| 44 | `qualification_agent.py` e `Orchestrator.diagnostico()` acessam `GroqClient._settings` diretamente (atributo privado) — encapsulamento incompleto; corrigido parcialmente na Etapa 7 (propriedades públicas do `Orchestrator` para leitura de repositórios), mas não para este caso, que exigiria alterar o `GroqClient` também | `agents/qualification_agent.py`, `agents/orchestrator.py` |
+| 45 | Uso de LLM exibido no dashboard (`GroqClient.stats`) é a contagem da sessão atual do processo Streamlit, em memória — não um histórico persistido; reinicia quando o servidor reinicia | `observability/metrics.py`, `llm/groq_client.py` |
+| 46 | Leads continuam sendo criados na abertura da conversa, gerando registros vazios se o usuário não interagir (limitação 17, inalterada) — o dashboard da Etapa 7 apenas oculta esses registros na exibição por padrão, não resolve a causa | `agents/orchestrator.py`, `ui/page_dashboard.py` |
 
 ---
 
@@ -278,3 +321,5 @@ no processo.
 | Custo estimado por conversa | ~US$ 0,002 |
 
 **Validação manual concluída (Etapa 6):** conversa real na interface cobrindo os cenários 3.1 (compra e aluguel, ciclo completo) e 3.2 (investimento, ciclo completo), os três blocos de agendamento (horário interpretável, disponibilidade vaga com sugestões, não duplicação), e a correção do texto de encerramento nos dois caminhos (LLM e determinístico). Follow-up e resumo — que não têm nenhuma representação visual na tela ainda (pendência 37) — foram validados por script contra o banco de produção real (`scripts/validar_followup_producao.py`), não um banco isolado: ciclo completo de 1ª tentativa → 2ª tentativa → escalada → resumo automático, com `GroqClient` real. Cinco bugs reais foram encontrados e corrigidos nessa rodada (itens 26–30), nenhum deles detectável pelos testes automatizados por natureza (renderização visual, relógio real, encadeamento de duas falhas de LLM no mesmo turno). Métricas de latência/custo específicas da Etapa 6 não foram medidas com rigor numérico — o achado quantificável desta rodada foi a taxa de fallback do `model_fast`, registrada como observação (item 40), não como medição precisa.
+
+**Validação manual concluída (Etapa 7):** conversa real na interface (cenário 3.1, compra) do zero até 100% qualificado, com agendamento confirmado no último turno via LLM real, cobrindo: navegação entre as três páginas sem conflito visual com o painel de qualificação já existente; dashboard refletindo o lead recém-criado sem reload do navegador (mesma instância de `Orchestrator` da sessão, confirmada pelo número de chamadas ao LLM batendo entre as duas telas); painel do corretor com agenda, resumo automático (gatilho "agendamento confirmado") e botão de verificação de follow-up testado contra o banco de produção real (31 leads processados, 10 reengajados, 0 escalados); exibição de score/temperatura confirmada na barra lateral após identificar a necessidade de restart completo do servidor (ver seção 6g). **Nenhum bug de código foi encontrado nesta rodada** — o único incidente foi de processo (arquivos trocados ao colar conteúdo entre duas entregas, detalhado na seção 6g), resolvido sem alterar nenhuma lógica de negócio já validada.

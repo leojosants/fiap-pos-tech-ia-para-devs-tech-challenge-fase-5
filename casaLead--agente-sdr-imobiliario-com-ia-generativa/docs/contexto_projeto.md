@@ -4,9 +4,19 @@
 > Instruções do Projeto, para retomar o desenvolvimento sem perda de contexto.
 > Atualize ao final de cada etapa concluída.
 
-**Última atualização:** fim da Etapa 6
+**Última atualização:** fim da Etapa 7
 **Repositório:** `git@github.com:leojosants/fiap-pos-tech-ia-para-devs-tech-challenge-fase-5.git`
 **Branch de trabalho:** `development` (merge para `main` apenas na entrega final)
+
+> **Reorganização de pastas (Etapa 7):** todo o código-fonte do projeto
+> foi movido para dentro de `casaLead--agente-sdr-imobiliario-com-ia-generativa/`,
+> na raiz do repositório — só `README.md` permanece fora, na raiz, porque é
+> o único arquivo que o GitHub renderiza automaticamente como página
+> inicial do repositório. Motivo da mudança: dar ao código um nome de
+> produto, mantendo o nome técnico do repositório (herdado do Tech
+> Challenge Fase 4) intacto. Movido com `git mv` para preservar o
+> histórico de cada arquivo. Detalhe completo em `docs/decisoes_tecnicas.md`,
+> seção 6f.
 
 ---
 
@@ -21,21 +31,22 @@
 
 ## 2. Ambiente confirmado
 
-```
+```md
 Python 3.12.9
 uv 0.11.3
 git 2.45.2.windows.1
 Windows · PowerShell e Git Bash
-Diretório: D:\REPOS-GITHUB-PUBLICO\fiap-pos-tech-ia-para-devs-tech-challenge-fase-5
+Diretório: D:\REPOS-GITHUB-PUBLICO\fiap-pos-tech-ia-para-devs-tech-challenge-fase-5\casaLead--agente-sdr-imobiliario-com-ia-generativa
 ```
 
 **Regras operacionais:**
 
 - Sempre `uv add` / `uv run`; nunca `pip` puro nem venv manual
 - Scripts executados como módulo: `uv run python -m scripts.x`
-- Após alterar arquivo `.py`, **reiniciar o servidor Streamlit** (Ctrl+C e subir de novo) — módulos importados ficam em cache
+- Após alterar arquivo `.py`, **reiniciar o servidor Streamlit por completo** (`Ctrl+C`, aguardar o processo encerrar, subir de novo) — confirmado na prática na Etapa 7: um simples refresh do navegador, com o processo antigo ainda rodando, não é suficiente; o hot-reload do Streamlit pode não pegar a mudança
 - Testes de linha de comando rodam em processo separado; não exigem parar o servidor
 - Variáveis de ambiente no PowerShell: `$env:DEMO_MODE="true"`
+- `pyproject.toml`, `.venv` e `pytest.ini` agora vivem dentro da subpasta do código (ver nota de reorganização acima) — todo comando `uv run ...` precisa ser executado de dentro dela
 
 ## 3. Stack e modelos
 
@@ -66,8 +77,8 @@ Diretório: D:\REPOS-GITHUB-PUBLICO\fiap-pos-tech-ia-para-devs-tech-challenge-fa
 | 4 | Recomendação de imóveis (RAG) | ✅ |
 | 5 | Classificação e priorização de leads | ✅ |
 | 6 | Agendamento, follow-up e resumo | ✅ |
-| 7 | Dashboard e observabilidade | ⬜ **próxima** |
-| 8 | Testes, documentação e deploy | ⬜ |
+| 7 | Dashboard e observabilidade | ✅ |
+| 8 | Testes, documentação e deploy | ⬜ **próxima** |
 
 ### Requisitos do enunciado
 
@@ -83,97 +94,115 @@ Diretório: D:\REPOS-GITHUB-PUBLICO\fiap-pos-tech-ia-para-devs-tech-challenge-fa
 | Agendamento de reuniões ou visitas | ✅ |
 | Follow-up automático | ✅ |
 | Resumo inteligente para o corretor | ✅ |
-| Dashboard mínimo | ⬜ Etapa 7 |
+| Dashboard mínimo | ✅ |
 
 ---
 
 ## 5. Estrutura atual do repositório
 
-```
-├── data/
-│   ├── seed/properties.json        # 60 imóveis sintéticos (versionado)
-│   └── runtime/casalead.db         # banco gerado (gitignored)
-├── docs/
-│   ├── decisoes_tecnicas.md        # decisões, bugs, limitações, métricas
-│   └── contexto_projeto.md         # este documento
-├── scripts/
-│   ├── generate_properties.py      # gerador determinístico (seed=369985)
-│   ├── validar_scoring.py          # inspeção manual do scoring (Etapa 5)
-│   ├── validar_agendamento_followup_resumo.py  # inspeção manual, banco isolado (Etapa 6)
-│   └── validar_followup_producao.py            # idem, contra banco de produção real (Etapa 6)
-├── src/
-│   ├── core/
-│   │   ├── enums.py                # Intent, LeadStatus, Zone, EventType...
-│   │   ├── models.py               # Lead, Property, Conversation, Message, Appointment, Followup, Event
-│   │   └── config.py               # Settings + detecção de modo demo
-│   ├── persistence/
-│   │   ├── database.py             # schema (7 tabelas) + bootstrap idempotente
-│   │   ├── property_repository.py  # busca estruturada + investimento
-│   │   ├── lead_repository.py      # CRUD + estatísticas de funil + buscar_inativos()
-│   │   ├── conversation_repository.py  # conversas, mensagens, eventos
-│   │   ├── appointment_repository.py   # agendamentos — NOVO (Etapa 6)
-│   │   └── followup_repository.py      # tentativas de follow-up — NOVO (Etapa 6)
-│   ├── llm/
-│   │   ├── groq_client.py          # cliente + retry + UsageStats (inclui resumir())
-│   │   ├── prompts.py              # persona Sofia, roteiros, PROMPT_EXTRACAO, PROMPT_RESUMO_CORRETOR
-│   │   └── demo_engine.py          # motor determinístico + detectores regex
-│   ├── agents/
-│   │   ├── qualification_agent.py  # extração híbrida regex + LLM
-│   │   ├── conversation_agent.py   # geração de fala + fallback
-│   │   ├── scheduling_agent.py     # interpretação de disponibilidade — NOVO (Etapa 6)
-│   │   └── orchestrator.py         # coordenação do turno
-│   ├── followup/
-│   │   └── followup_manager.py     # reengajamento de leads inativos — NOVO (Etapa 6)
-│   ├── reporting/
-│   │   └── summarizer.py           # resumo para o corretor — NOVO (Etapa 6)
-│   ├── recommendation/
-│   │   ├── retriever.py            # índice TF-IDF + expansão de sinônimos
-│   │   └── ranker.py               # filtro SQL + score semântico
-│   ├── scoring/
-│   │   ├── context.py              # dataclass ContextoScoring (dado externo)
-│   │   ├── rules.py                # regras explícitas puras + ResultadoScoring
-│   │   └── builder.py              # constrói ContextoScoring (única parte impura)
-│   └── ui/
-│       ├── state.py                # gestão de session_state
-│       ├── page_chat.py            # página de atendimento
-│       └── components/
-│           ├── qualification_panel.py
-│           └── property_card.py
-├── tests/
-│   ├── test_property_repository.py         # 21 testes
-│   ├── test_scoring_rules.py                # 6 testes — motor puro, sem banco
-│   ├── test_scoring_builder.py              # 2 testes — integração com SQLite real
-│   ├── test_appointment_repository.py       # 25 testes — NOVO (Etapa 6)
-│   ├── test_scheduling_agent.py             # 42 testes — NOVO (Etapa 6)
-│   ├── test_followup_repository.py          # 17 testes — NOVO (Etapa 6)
-│   ├── test_followup_manager.py             # 25 testes — NOVO (Etapa 6)
-│   ├── test_prompts.py                      # 9 testes — NOVO (Etapa 6)
-│   ├── test_prompts_resumo.py               # 13 testes — NOVO (Etapa 6)
-│   ├── test_conversation_agent.py           # 5 testes — NOVO (Etapa 6)
-│   ├── test_summarizer.py                   # 16 testes — NOVO (Etapa 6)
-│   ├── test_orchestrator_scheduling.py      # 8 testes — NOVO (Etapa 6)
-│   ├── test_orchestrator_summary_followup.py  # 11 testes — NOVO (Etapa 6)
-│   ├── test_qualification_agent_contexto.py   # 4 testes — NOVO (Etapa 6, pós-validação manual)
-│   ├── test_orchestrator_contexto_extracao.py # 5 testes — NOVO (Etapa 6, pós-validação manual)
-│   ├── test_page_chat_escape.py                # 6 testes — NOVO (Etapa 6, pós-validação manual)
-│   └── test_prompts_contato.py                 # 6 testes — NOVO (Etapa 6, pós-validação manual)
-├── .env.example
-├── .gitattributes
-├── main.py
-└── pyproject.toml
+```md
+├── README.md                       # única exceção — fica FORA da subpasta (ver nota no topo)
+└── casaLead--agente-sdr-imobiliario-com-ia-generativa/
+    ├── data/
+    │   ├── seed/properties.json        # 60 imóveis sintéticos (versionado)
+    │   └── runtime/casalead.db         # banco gerado (gitignored)
+    ├── docs/
+    │   ├── decisoes_tecnicas.md        # decisões, bugs, limitações, métricas
+    │   └── contexto_projeto.md         # este documento
+    ├── scripts/
+    │   ├── generate_properties.py      # gerador determinístico (seed=369985)
+    │   ├── validar_scoring.py          # inspeção manual do scoring (Etapa 5)
+    │   ├── validar_agendamento_followup_resumo.py  # inspeção manual, banco isolado (Etapa 6)
+    │   └── validar_followup_producao.py            # idem, contra banco de produção real (Etapa 6)
+    ├── src/
+    │   ├── core/
+    │   │   ├── enums.py                # Intent, LeadStatus, Zone, EventType...
+    │   │   ├── models.py               # Lead, Property, Conversation, Message, Appointment, Followup, Event
+    │   │   └── config.py               # Settings + detecção de modo demo
+    │   ├── persistence/
+    │   │   ├── database.py             # schema (7 tabelas) + bootstrap idempotente
+    │   │   ├── property_repository.py  # busca estruturada + investimento
+    │   │   ├── lead_repository.py      # CRUD + estatísticas de funil + buscar_inativos()
+    │   │   ├── conversation_repository.py  # conversas, mensagens, eventos
+    │   │   ├── appointment_repository.py   # agendamentos + listar_proximos()
+    │   │   └── followup_repository.py      # tentativas de follow-up
+    │   ├── llm/
+    │   │   ├── groq_client.py          # cliente + retry + UsageStats (inclui resumir())
+    │   │   ├── prompts.py              # persona Sofia, roteiros, PROMPT_EXTRACAO, PROMPT_RESUMO_CORRETOR
+    │   │   └── demo_engine.py          # motor determinístico + detectores regex
+    │   ├── agents/
+    │   │   ├── qualification_agent.py  # extração híbrida regex + LLM
+    │   │   ├── conversation_agent.py   # geração de fala + fallback
+    │   │   ├── scheduling_agent.py     # interpretação de disponibilidade
+    │   │   └── orchestrator.py         # coordenação do turno + propriedades públicas — ALTERADO (Etapa 7)
+    │   ├── followup/
+    │   │   └── followup_manager.py     # reengajamento de leads inativos
+    │   ├── reporting/
+    │   │   └── summarizer.py           # resumo para o corretor
+    │   ├── recommendation/
+    │   │   ├── retriever.py            # índice TF-IDF + expansão de sinônimos
+    │   │   └── ranker.py               # filtro SQL + score semântico
+    │   ├── scoring/
+    │   │   ├── context.py              # dataclass ContextoScoring (dado externo)
+    │   │   ├── rules.py                # regras explícitas puras + ResultadoScoring
+    │   │   └── builder.py              # constrói ContextoScoring (única parte impura)
+    │   ├── observability/
+    │   │   └── metrics.py              # agregação de estatísticas p/ dashboard — NOVO (Etapa 7)
+    │   └── ui/
+    │       ├── state.py                # gestão de session_state
+    │       ├── page_chat.py            # página de atendimento
+    │       ├── page_dashboard.py       # funil, eventos, uso de LLM — NOVO (Etapa 7)
+    │       ├── page_broker.py          # resumos, agenda, gatilho de follow-up — NOVO (Etapa 7)
+    │       └── components/
+    │           ├── qualification_panel.py  # + score/temperatura — ALTERADO (Etapa 7)
+    │           └── property_card.py
+    ├── tests/
+    │   ├── test_property_repository.py         # 21 testes
+    │   ├── test_scoring_rules.py                # 6 testes — motor puro, sem banco
+    │   ├── test_scoring_builder.py              # 2 testes — integração com SQLite real
+    │   ├── test_appointment_repository.py       # 25 testes
+    │   ├── test_scheduling_agent.py             # 42 testes
+    │   ├── test_followup_repository.py          # 17 testes
+    │   ├── test_followup_manager.py             # 25 testes
+    │   ├── test_prompts.py                      # 9 testes
+    │   ├── test_prompts_resumo.py               # 13 testes
+    │   ├── test_conversation_agent.py           # 5 testes
+    │   ├── test_summarizer.py                   # 16 testes
+    │   ├── test_orchestrator_scheduling.py      # 8 testes
+    │   ├── test_orchestrator_summary_followup.py  # 11 testes
+    │   ├── test_qualification_agent_contexto.py   # 4 testes
+    │   ├── test_orchestrator_contexto_extracao.py # 5 testes
+    │   ├── test_page_chat_escape.py                # 6 testes
+    │   ├── test_prompts_contato.py                 # 6 testes
+    │   ├── test_metrics.py                         # 7 testes — NOVO (Etapa 7)
+    │   ├── test_orchestrator_properties.py         # 8 testes — NOVO (Etapa 7)
+    │   ├── test_page_dashboard.py                  # 5 testes — NOVO (Etapa 7)
+    │   ├── test_page_broker.py                     # 4 testes — NOVO (Etapa 7)
+    │   └── test_qualification_panel.py             # 5 testes — NOVO (Etapa 7)
+    ├── .env.example
+    ├── .gitattributes
+    ├── main.py                         # + navegação multipágina (st.navigation) — ALTERADO (Etapa 7)
+    └── pyproject.toml
 ```
 
-**Pastas ainda vazias:** `src/observability/` — prevista para a Etapa 7.
+**Pastas que deixaram de estar vazias:** `src/observability/` — agora contém `metrics.py`.
 
 ---
 
 ## 6. Arquitetura em uma página
 
-```
-INTERFACE (Streamlit)
-  page_chat · qualification_panel · property_card · state
-         ↓ ResultadoTurno
-ORQUESTRADOR  ← única porta de entrada do domínio
+```md
+INTERFACE (Streamlit, navegação multipágina st.navigation — Etapa 7)
+  💬 Atendimento          📊 Dashboard           🧑‍💼 Corretor
+  page_chat                page_dashboard         page_broker
+  qualification_panel      (funil, eventos,       (resumos, agenda,
+  property_card · state     uso de LLM)            botão de follow-up)
+         ↓ ResultadoTurno        ↓                       ↓
+         │              leitura via propriedades públicas do Orchestrator
+         │              (leads, conversas, agendamentos, followups,
+         │              imoveis, cliente — Etapa 7) → src.observability.metrics
+         ↓                                              ↓
+ORQUESTRADOR  ← única porta de entrada do domínio (escrita E leitura pública)
   persiste entrada → qualifica → recomenda → agenda → pontua
     → resume (se necessário) → gera resposta → persiste saída
          ↓                              ↓
@@ -181,9 +210,10 @@ AGENTES                          PERSISTÊNCIA
   qualification_agent              lead_repository
   conversation_agent               property_repository
   scheduling_agent                 conversation_repository
-  (followup_manager — sem gatilho  appointment_repository
-   automático no turno; chamado    followup_repository
-   sob demanda, ver Etapa 6)
+  followup_manager (sem            appointment_repository
+   background real — chamado       followup_repository
+   por botão na UI, Etapa 7,
+   ou script; ver limitação 33)
          ↓                              ↓
 CAMADA DE IA                     SQLite (9 tabelas)
   groq_client · prompts             + seed versionado
@@ -233,6 +263,11 @@ firmada na seção 10.
 | Resumo do corretor | LLM (`model_smart`, via `GroqClient.resumir()`, já existente) quando disponível; degrada para template estruturado (reaproveita `montar_conteudo_resumo()`) no modo demo ou em falha de API — mesmo padrão de degradação do `conversation_agent` |
 | Gatilho do resumo | Lead fica quente, agendamento é confirmado, ou follow-up escala — não a cada turno; e não quando a condição já valia antes (só na transição) |
 | Repositório de agendamento compartilhado | `AppointmentRepository` instanciado uma vez no orquestrador, usado tanto por `SchedulingAgent` quanto por `Summarizer` — stateless por chamada, sem motivo para duas instâncias |
+| Propriedades públicas de leitura no `Orchestrator` (Etapa 7) | `orquestrador.leads`, `.conversas`, `.imoveis`, `.agendamentos`, `.followups`, `.cliente` — somente leitura (`@property`, sem setter). Resolve o acesso direto a atributo privado que já existia (`page_chat` chamava `orquestrador._leads`) e dá às páginas novas um jeito limpo de consultar sem duplicar instância de repositório |
+| Filtro de leads vazios no dashboard | Reaproveita `Lead.completude()`/`Lead.intent` em Python (não reimplementado em SQL) para excluir, por padrão, leads sem nenhuma interação — mesma decisão já tomada para o scoring (seção 6c): a regra de completude vive num só lugar, no domínio |
+| Navegação multipágina via `st.navigation`/`st.Page` | Escolhida sobre `st.sidebar.radio` por gerar URL própria por página (`/_pagina_dashboard`, `/_pagina_corretor`) — ajuda na demonstração para a banca e é o mecanismo nativo do Streamlit desde a 1.36 |
+| Threshold de follow-up com atalho de demonstração | Campo numérico de horas (padrão 24, comportamento real) + atalho de 1 minuto, visível só em modo demonstrativo — permite mostrar o ciclo completo de follow-up ao vivo sem esperar 24h de verdade |
+| `pandas` usado sem declarar em `pyproject.toml` | Dependência obrigatória do próprio `streamlit` (não opcional — usada internamente por todo componente de dado/gráfico); `page_dashboard.py` importa o que o `streamlit` já garante, sem adicionar peso novo ao ambiente |
 
 ---
 
@@ -347,18 +382,49 @@ Sete blocos de teste executados na UI, com ~23 bugs encontrados e corrigidos:
 
 ---
 
-## 11. Etapas 7 e 8 — planejadas
+## 11. Etapa 7 — concluída
 
-**Etapa 7 — Dashboard e observabilidade (próxima)**
+**Objetivo alcançado:** dashboard mínimo (funil de leads, eventos, agenda, uso de LLM) e painel do corretor (resumos, agenda, gatilho manual de follow-up), navegação multipágina entre as três telas, e as duas pendências abertas desde as Etapas 5 e 6 — exibição visual de score/temperatura e gatilho de UI para follow-up — ambas resolvidas.
 
-- `src/ui/page_dashboard.py` — funil, leads por temperatura, métricas de conversão
-- `src/ui/page_broker.py` — visão do corretor com resumos
-- `src/observability/` — consumir `ConversationRepository.metricas_de_eventos()` e `GroqClient.stats`
-- Navegação entre páginas em `main.py`
-- Gatilho de UI para `Orchestrator.executar_verificacao_followup()` (pendência da Etapa 6)
-- Exibição visual de `score`/`temperature` (pendência da Etapa 5)
+**Ordem de implementação:** `src/observability/metrics.py` (agregação pura) → propriedades públicas no `orchestrator.py` (pré-requisito de leitura para as páginas novas) → `page_dashboard.py` → `page_broker.py` → navegação em `main.py` → `qualification_panel.py` (score/temperatura).
 
-**Etapa 8 — Testes, documentação e deploy**
+**Arquivos novos:**
+
+- `src/observability/metrics.py` — `funil_de_leads()`, `leads_com_interacao()`, `coletar()`; agrega as estatísticas já existentes nos repositórios (`LeadRepository`, `ConversationRepository`, `AppointmentRepository`, `FollowupRepository`, `GroqClient.stats`) sem reimplementar nenhuma
+- `src/ui/page_dashboard.py` — funil por status/temperatura/intenção, eventos do sistema, agenda e follow-ups, uso de LLM; gráficos via `st.bar_chart` (usa `pandas`, dependência transitiva do `streamlit`)
+- `src/ui/page_broker.py` — verificação manual de follow-up (com atalho de demonstração), agenda dos próximos 7 dias (`AppointmentRepository.listar_proximos()`, já deixado pronto na Etapa 6 exatamente para este uso), resumos gerados para o corretor
+
+**Arquivos modificados:**
+
+- `src/agents/orchestrator.py` — seis propriedades públicas de leitura (`leads`, `conversas`, `imoveis`, `agendamentos`, `followups`, `cliente`); `FollowupRepository` passou a ser guardado como atributo próprio (`self._followups_repo`), compartilhado com o `FollowupManager`, em vez de criado inline e inacessível de fora
+- `src/ui/page_chat.py` — uma linha: `orquestrador._leads` → `orquestrador.leads`
+- `main.py` — `st.navigation`/`st.Page` com três páginas (Atendimento, Dashboard, Corretor); funções wrapper para as duas páginas que recebem o orquestrador por injeção, já que `st.Page` exige uma função sem argumentos
+- `src/ui/components/qualification_panel.py` — nova linha exibindo temperatura (emoji + texto) e score, usando `_CORES_TEMPERATURA` (já existia no arquivo, sem uso até então)
+
+**Testes:** 5 arquivos novos, 29 testes (250 no total do projeto, contra 221 ao fim da Etapa 6). Todos os testes de UI desta etapa seguem o mesmo princípio já estabelecido em `test_page_chat_escape.py`: só a lógica pura de cada módulo (sem chamada a `st.*`) é testável automaticamente — `_serie()` (`page_dashboard`), `_resumir_resultados()` (`page_broker`), `_formatar()` (`qualification_panel`, que já existia sem teste e passou a ter um, por consistência com os demais módulos de UI).
+
+**Um incidente de processo, não de código, ocorrido e resolvido durante a etapa:** ao colar o conteúdo completo de `orchestrator.py` numa entrega, ele acabou salvo por engano em `conversation_agent.py` no ambiente local do aluno — os dois arquivos ficaram com conteúdo trocado, quebrando toda a suíte com `ImportError` de importação circular (`conversation_agent.py` importando de si mesmo). Diagnosticado comparando byte a byte os arquivos que o aluno reenviou; resolvido reentregando os dois arquivos completos como download, com o caminho exato de cada um, em vez de blocos de código colados — reduz o risco de erro de cópia entre arquivos abertos simultaneamente no editor.
+
+**Decisão que atravessa a etapa:** nenhuma tela nova processa lógica de negócio — `page_dashboard.py` e `page_broker.py` só leem, através das propriedades públicas do orquestrador, o que os agentes e repositórios já calculam e persistem. Mesmo princípio já firmado desde a arquitetura original (`ResultadoTurno` como contrato com a UI): a interface não sabe como o dado foi produzido, só como exibi-lo.
+
+**Validação manual na interface: concluída.** Conversa real (cenário 3.1, compra) do zero até 100% qualificado, com agendamento confirmado no último turno, cobrindo:
+
+- Navegação entre as três páginas sem conflito visual com o painel de qualificação já existente na barra lateral
+- Dashboard refletindo o lead recém-criado sem reload do navegador — mesma instância de `Orchestrator` da sessão, confirmada pelo número de chamadas ao LLM batendo entre as duas telas
+- Painel do corretor: agenda mostrando o compromisso confirmado, resumo automático gerado (gatilho "agendamento confirmado") aparecendo na lista, botão de verificação de follow-up testado contra o banco de produção real (31 leads processados, 10 reengajados, 0 escalados)
+- Exibição de score/temperatura na barra lateral do chat — só confirmada depois de identificar que o servidor Streamlit precisava de restart completo (não bastava recarregar o navegador) para pegar a mudança de código; achado que reforça, na prática, a regra operacional já registrada na seção 2
+
+**Reorganização de pastas, decidida e executada pelo aluno durante a etapa (fora do escopo técnico original):** todo o código movido para dentro de `casaLead--agente-sdr-imobiliario-com-ia-generativa/`, com `README.md` permanecendo na raiz do repositório. Feito em três passos — desfazer uma movimentação manual inicial → mover com `git mv`, preservando histórico → descartar e recriar o `.venv` (guarda caminho absoluto, não sobrevive à mudança de local). Detalhe completo, incluindo os comandos exatos usados, em `docs/decisoes_tecnicas.md`, seção 6f.
+
+**Pendente para uma etapa futura (não bloqueia o fechamento desta):**
+
+- `Orchestrator.diagnostico()` ainda acessa `self._cliente._settings` (atributo privado do `GroqClient`) — mesma família de pendência já registrada para `qualification_agent.py`; não corrigida nesta etapa porque exigiria alterar `GroqClient` também, fora do escopo definido para a Etapa 7
+- Uso de LLM exibido no dashboard é a contagem da sessão atual do processo Streamlit (`GroqClient.stats`, em memória), não um histórico persistido — já sinalizado na própria tela, mas vale registrar como limitação de dado, não de interface
+- Histórico de `git mv` de alguns arquivos `__init__.py` vazios não ficou perfeitamente limpo (o Git emparelhou deleção/criação de forma um pouco aleatória entre arquivos idênticos) — cosmético, não afeta conteúdo nem funcionamento
+
+---
+
+## 12. Etapa 8 — planejada
 
 - Ampliar `tests/` (demo_engine, qualification_agent, ranker, groq_client)
 - `requirements.txt` gerado do lock para o Streamlit Cloud
@@ -367,30 +433,33 @@ Sete blocos de teste executados na UI, com ~23 bugs encontrados e corrigidos:
 
 ---
 
-## 12. Pendências conhecidas
+## 13. Pendências conhecidas
 
 | Item | Observação |
 | --- | --- |
-| Encapsulamento | `qualification_agent` e `orchestrator` acessam `_cliente._settings`; `page_chat` acessa `orquestrador._leads`. Corrigir expondo propriedades públicas |
-| Leads vazios | Criados na abertura da conversa; poluem o dashboard se o usuário não interagir (limitação 17) |
+| Encapsulamento — leitura | ✅ **Resolvido na Etapa 7.** `page_chat` acessava `orquestrador._leads`; corrigido com propriedades públicas no `Orchestrator` (`leads`, `conversas`, `imoveis`, `agendamentos`, `followups`, `cliente`) |
+| Encapsulamento — `_cliente._settings` | Ainda pendente: `qualification_agent.py` e `Orchestrator.diagnostico()` continuam acessando `self._cliente._settings` diretamente. Fora do escopo da Etapa 7 (exigiria alterar `GroqClient`) |
+| Leads vazios | ✅ **Endereçado na Etapa 7** para fins de exibição: `page_dashboard.py` oculta por padrão leads sem interação (`metrics.leads_com_interacao()`), com contador de quantos foram ocultados. A causa raiz (criação do lead na abertura da conversa) permanece — é a limitação 17, deliberadamente não alterada, pois viabiliza a continuidade do atendimento |
 | Alertas ⚠️ sem cor | `:orange[]` não funciona em `st.caption`; alternativa é `st.warning` |
-| Threshold de follow-up fixo | `executar_verificacao_followup(horas=...)` não lê de variável de ambiente — sem atalho para acelerar em `DEMO_MODE` (pendência nova da Etapa 6) |
-| Follow-up sem gatilho de UI | Método pronto no orquestrador, sem botão/rotina que o acione — fica para a Etapa 7 (pendência nova da Etapa 6) |
-| `_TIPOS_LEGIVEIS` duplicado | Mesmo dicionário de 3 entradas em `scheduling_agent.py` e `summarizer.py` — trade-off consciente para não acoplar a um símbolo privado de outro módulo (pendência nova da Etapa 6) |
+| Threshold de follow-up fixo | ✅ **Resolvido na Etapa 7.** `page_broker.py` expõe campo numérico de horas (padrão 24) + atalho de 1 minuto em modo demonstrativo |
+| Follow-up sem gatilho de UI | ✅ **Resolvido na Etapa 7.** Botão "Verificar leads inativos agora" em `page_broker.py`, chamando `Orchestrator.executar_verificacao_followup()` |
+| `_TIPOS_LEGIVEIS` duplicado | Mesmo dicionário de 3 entradas, agora em três módulos (`scheduling_agent.py`, `summarizer.py`, e `page_broker.py`, Etapa 7) — trade-off consciente mantido: não acoplar a um símbolo privado de outro módulo |
 | Colisão disponibilidade/prazo | Resposta de prazo com "cara" de agendamento (dia da semana + período) pode ser capturada como disponibilidade em vez de urgência — regex vence sem saber a que pergunta respondia (pós-validação manual) |
 | Repetição de pergunta no fallback | Motor determinístico pode sortear a mesma das 2 opções em quedas consecutivas pro mesmo slot — avaliado e conscientemente não corrigido (pós-validação manual) |
 | Taxa de fallback do `model_fast` | Pareceu alta em teste manual (~30 turnos); causa raiz (modelo vs. provedor) não isolada — investigação de baixo custo proposta para o futuro (pós-validação manual) |
 | Telefone/e-mail nunca coletados | Nenhum ponto do sistema pergunta ou extrai contato do lead — decisão consciente (Opção B: ajuste de texto, não coleta de dado), registrada em `decisoes_tecnicas.md` seção 6e (pós-validação manual) |
 | Voice AI (entrada por voz) | Avaliada tecnicamente como viável (Groq Whisper + `st.audio_input`), adiada deliberadamente — sem TTS, só entrada (pós-validação manual) |
+| Uso de LLM no dashboard é por sessão | `GroqClient.stats` acumula em memória desde que o processo Streamlit começou — não é histórico persistido; já sinalizado na própria tela (pendência nova da Etapa 7) |
+| Histórico de `git mv` de `__init__.py` vazios | Não ficou perfeitamente limpo na reorganização de pastas — Git emparelhou deleção/criação de forma um pouco aleatória entre arquivos idênticos; cosmético, sem efeito em conteúdo (pendência nova da Etapa 7) |
 | Data de entrega | Não informada nesta sessão |
 
 ---
 
-## 13. Como retomar
+## 14. Como retomar
 
 1. Colar as **Instruções do Projeto** (o bloco longo com os 16 itens).
 2. Colar este documento
-3. Informar a etapa desejada — provavelmente **Etapa 7**
+3. Informar a etapa desejada — provavelmente **Etapa 8**
 4. Se necessário, enviar `docs/decisoes_tecnicas.md` para o histórico completo de decisões e bugs
 
 **Forma de trabalho estabelecida:** passo a passo, com explicação de cada decisão técnica, alternativas descartadas e limitações; validação por execução real de teste (`uv run pytest`) antes de considerar um arquivo fechado; commit sugerido ao final de cada arquivo; confirmação explícita antes de avançar de etapa — nenhuma etapa começa sem ordem direta, mesmo que a anterior tenha fechado.
