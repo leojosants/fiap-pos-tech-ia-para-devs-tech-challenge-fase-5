@@ -81,12 +81,12 @@ etapa menos qualificada do funil.
 | 4 | Memória e persistência do contexto conversacional | ✅ |
 | 5 | Modo demonstrativo sem dependência de API | ✅ |
 | 6 | Observabilidade (eventos, tokens, latência) | ✅ |
-| 7 | Consulta à base simulada de imóveis (RAG) | 🔜 |
-| 8 | Classificação e priorização de leads | 🔜 |
-| 9 | Agendamento de reuniões e visitas | 🔜 |
-| 10 | Follow-up automático de leads inativos | 🔜 |
-| 11 | Resumo inteligente para o corretor | 🔜 |
-| 12 | Dashboard de acompanhamento | 🔜 |
+| 7 | Consulta à base simulada de imóveis (RAG) | ✅ |
+| 8 | Classificação e priorização de leads | ✅ |
+| 9 | Agendamento de reuniões e visitas | ✅ |
+| 10 | Follow-up automático de leads inativos | ✅ |
+| 11 | Resumo inteligente para o corretor | ✅ |
+| 12 | Dashboard de acompanhamento | ✅ |
 
 ---
 
@@ -145,6 +145,7 @@ O sistema mantém-se operante mesmo sem acesso ao provedor de LLM:
 
 ## 💬 Fluxo da Conversa
 
+```md
 Entrada do lead
 ↓
 Persistência da mensagem ──────→ tabela messages
@@ -163,6 +164,7 @@ Confirmação de intenção ambígua?
 Persistência da resposta ──────→ tabela messages
 ↓
 ResultadoTurno ────────────────→ interface
+```
 
 ### Critérios de qualificação
 
@@ -251,27 +253,37 @@ seu perfil ao nosso especialista em investimentos.
 
 O uso de LangChain foi avaliado e descartado: a orquestração de três
 agentes com fluxo determinístico não justifica o overhead de abstração.
-Ver [decisões técnicas](docs/decisoes_tecnicas.md).
+Ver [decisões técnicas](casaLead--agente-sdr-imobiliario-com-ia-generativa/docs/decisoes_tecnicas.md).
 
 ---
 
 ## 📁 Estrutura de Diretórios
 
-├── data/
-│ ├── seed/properties.json # base de 60 imóveis (versionada)
-│ └── runtime/ # banco SQLite (gerado, não versionado)
-├── docs/
-│ └── decisoes_tecnicas.md # decisões, bugs e limitações
-├── scripts/
-│ └── generate_properties.py # gerador determinístico da base
-├── src/
-│ ├── core/ # modelos, enums, configuração
-│ ├── persistence/ # repositórios e schema
-│ ├── llm/ # cliente Groq, prompts, motor demo
-│ ├── agents/ # qualificação, conversação, orquestrador
-│ └── ui/ # páginas e componentes Streamlit
-├── tests/
-└── main.py # ponto de entrada
+```md
+├── README.md                       # este arquivo — único item fora da subpasta
+└── casaLead--agente-sdr-imobiliario-com-ia-generativa/
+    ├── data/
+    │   ├── seed/properties.json    # base de 60 imóveis (versionada)
+    │   └── runtime/                # banco SQLite (gerado, não versionado)
+    ├── docs/
+    │   ├── decisoes_tecnicas.md    # decisões, bugs e limitações
+    │   └── contexto_projeto.md     # estado do projeto por etapa
+    ├── scripts/
+    │   └── generate_properties.py  # gerador determinístico da base
+    ├── src/
+    │   ├── core/                   # modelos, enums, configuração
+    │   ├── persistence/            # repositórios e schema
+    │   ├── llm/                    # cliente Groq, prompts, motor demo
+    │   ├── agents/                 # qualificação, conversação, agendamento, orquestrador
+    │   ├── followup/                # reengajamento de leads inativos
+    │   ├── reporting/               # resumo para o corretor
+    │   ├── recommendation/          # busca e recomendação de imóveis (RAG)
+    │   ├── scoring/                 # classificação e priorização de leads
+    │   ├── observability/           # agregação de métricas para o dashboard
+    │   └── ui/                      # páginas (atendimento, dashboard, corretor) e componentes
+    ├── tests/
+    └── main.py                     # ponto de entrada — navegação multipágina
+```
 
 ---
 
@@ -287,8 +299,14 @@ Ver [decisões técnicas](docs/decisoes_tecnicas.md).
 
 ```bash
 git clone git@github.com:leojosants/fiap-pos-tech-ia-para-devs-tech-challenge-fase-5.git
-cd fiap-pos-tech-ia-para-devs-tech-challenge-fase-5
+cd fiap-pos-tech-ia-para-devs-tech-challenge-fase-5/casaLead--agente-sdr-imobiliario-com-ia-generativa
 ```
+
+> O código-fonte fica dentro da subpasta `casaLead--agente-sdr-imobiliario-com-ia-generativa/`
+> — só o `README.md` permanece na raiz do repositório, porque é o
+> único arquivo que o GitHub renderiza automaticamente como página
+> inicial. Todos os comandos a seguir (`uv sync`, `uv run ...`) devem
+> ser executados de dentro dessa subpasta.
 
 ### Passo 2 — Configurar variáveis de ambiente
 
@@ -357,7 +375,7 @@ uv run pytest
 
 Todas as decisões de arquitetura e implementação, com as alternativas
 consideradas e suas justificativas, estão registradas em
-**[docs/decisoes_tecnicas.md](docs/decisoes_tecnicas.md)** — incluindo os
+**[docs/decisoes_tecnicas.md](casaLead--agente-sdr-imobiliario-com-ia-generativa/docs/decisoes_tecnicas.md)** — incluindo os
 bugs encontrados durante o desenvolvimento e os testes de segurança
 realizados.
 
@@ -376,8 +394,8 @@ Principais limitações desta prova de conceito:
 - **Slots imutáveis** — apenas a intenção admite correção pelo lead; os
   demais campos, uma vez preenchidos, não são sobrescritos.
 
-A lista completa, com 17 itens e o módulo correspondente, está em
-[docs/decisoes_tecnicas.md](docs/decisoes_tecnicas.md).
+A lista completa, com 46 itens e o módulo correspondente, está em
+[docs/decisoes_tecnicas.md](casaLead--agente-sdr-imobiliario-com-ia-generativa/docs/decisoes_tecnicas.md).
 
 ---
 
@@ -405,4 +423,3 @@ A lista completa, com 17 itens e o módulo correspondente, está em
 
 > Prova de conceito acadêmica. Os dados de imóveis e leads são
 > sintéticos e não representam ofertas reais.
-MARKDOWN_EOF
