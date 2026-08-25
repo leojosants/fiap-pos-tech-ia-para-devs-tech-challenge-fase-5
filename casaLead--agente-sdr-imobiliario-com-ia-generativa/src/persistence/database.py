@@ -18,8 +18,19 @@ from contextlib import contextmanager
 from collections.abc import Iterator
 from pathlib import Path
 
-DEFAULT_DB_PATH = Path("data/runtime/casalead.db")
-SEED_PROPERTIES = Path("data/seed/properties.json")
+# Raiz do projeto (casaLead--agente-sdr-imobiliario-com-ia-generativa/),
+# calculada a partir da localização deste arquivo — não do diretório de
+# trabalho do processo. Necessário porque o Streamlit Community Cloud
+# roda o app a partir da raiz do repositório Git (que contém esta pasta
+# como subdiretório), não de dentro dela: um caminho relativo simples
+# ("data/seed/...") resolveria contra o lugar errado e falharia com
+# FileNotFoundError apenas em produção, nunca em desenvolvimento local
+# (onde sempre rodamos "uv run streamlit run main.py" já de dentro
+# desta pasta, mascarando o problema).
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+DEFAULT_DB_PATH = _PROJECT_ROOT / "data" / "runtime" / "casalead.db"
+SEED_PROPERTIES = _PROJECT_ROOT / "data" / "seed" / "properties.json"
 
 
 # ============================================================

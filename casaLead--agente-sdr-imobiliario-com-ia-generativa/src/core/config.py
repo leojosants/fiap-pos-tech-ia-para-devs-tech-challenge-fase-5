@@ -25,7 +25,12 @@ load_dotenv()
 DEFAULT_MODEL_FAST = "openai/gpt-oss-20b"
 DEFAULT_MODEL_SMART = "openai/gpt-oss-120b"
 
-DEFAULT_DB_PATH = "data/runtime/casalead.db"
+# Ancorado na localização deste arquivo, não no diretório de trabalho
+# do processo — mesma razão documentada em src/persistence/database.py:
+# o Streamlit Community Cloud roda o app a partir da raiz do
+# repositório Git, não desta subpasta.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+DEFAULT_DB_PATH = str(_PROJECT_ROOT / "data" / "runtime" / "casalead.db")
 
 
 def _from_streamlit_secrets(chave: str) -> str | None:
