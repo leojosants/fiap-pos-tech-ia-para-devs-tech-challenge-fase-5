@@ -124,3 +124,48 @@ class TestCompatibilidadeRetroativa:
 
         assert resposta.origem == "llm"
         assert resposta.texto == "Perfeito, já anotei aqui."
+
+
+class TestRespostaImplausivelmenteCurta:
+    """Regressão: resposta real observada em produção no deploy do
+    Streamlit Cloud (Etapa 8) — a API retornou sucesso=True com um
+    conteúdo de só 3 caracteres ("Ent"), exibido quebrado ao lead.
+    Causa raiz não identificada; esta guarda garante degradação
+    segura independente da causa."""
+
+    def test_resposta_muito_curta_degrada_para_deterministico(self):
+        cliente = _ClienteFalso(resposta=_RespostaLLMFalsa(conteudo="Ent"))
+        agente = ConversationAgent(cliente=cliente, motor_demo=_MotorDemoFalso())
+
+        resposta = agente.responder(_lead(), "oi", historico=[])
+
+        assert resposta.origem == "fallback"
+        assert resposta.texto == "Resposta determinística de teste."
+
+    def test_resposta_um_caractere_abaixo_do_limite_tambem_degrada(self):
+        # 14 caracteres — um a menos que o limite de 15. Testa a
+        # fronteira pelo lado de baixo, complementando o teste do
+        # limite exato (test_resposta_no_limite_do_tamanho_minimo_passa).
+        texto_abaixo_do_limite = "Entendi direit"  # 14 caracteres
+        assert len(texto_abaixo_do_limite) == 14
+
+        cliente = _ClienteFalso(resposta=_RespostaLLMFalsa(conteudo=texto_abaixo_do_limite))
+        agente = ConversationAgent(cliente=cliente, motor_demo=_MotorDemoFalso())
+
+        resposta = agente.responder(_lead(), "oi", historico=[])
+
+        assert resposta.origem == "fallback"
+
+    def test_resposta_no_limite_do_tamanho_minimo_passa(self):
+        # Exatamente 15 caracteres — o limite é inclusivo por baixo
+        # (só falha abaixo de 15, não igual a 15).
+        texto_no_limite = "Entendi direito"  # 16 caracteres, acima do limite
+        assert len(texto_no_limite) >= 15
+
+        cliente = _ClienteFalso(resposta=_RespostaLLMFalsa(conteudo=texto_no_limite))
+        agente = ConversationAgent(cliente=cliente, motor_demo=_MotorDemoFalso())
+
+        resposta = agente.responder(_lead(), "oi", historico=[])
+
+        assert resposta.origem == "llm"
+        assert resposta.texto == texto_no_limite

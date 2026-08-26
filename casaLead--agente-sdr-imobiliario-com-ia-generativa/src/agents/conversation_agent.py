@@ -24,6 +24,19 @@ from src.llm.prompts import SAUDACAO_INICIAL, montar_prompt_sistema
 
 logger = logging.getLogger(__name__)
 
+# Uma fala legítima da Sofia nunca é tão curta quanto isto — mesmo um
+# "Oi! Tudo bem?" tem mais que isso. Observado em produção (deploy do
+# Streamlit Cloud): uma resposta chegou como "Ent" — 3 caracteres,
+# marcada como sucesso pela API, sem erro nenhum — e foi exibida
+# quebrada ao lead. Causa raiz não identificada (não reproduzida em
+# nova tentativa; não é o bug de $ duplicado nem a lógica de remover
+# aspas, ambos descartados por inspeção de código). Esta guarda não
+# resolve a causa raiz, mas garante que esse tipo de resposta nunca
+# mais chegue ao usuário: é tratada como falha, acionando o mesmo
+# fallback determinístico já usado para erro de API — ver
+# docs/decisoes_tecnicas.md.
+_TAMANHO_MINIMO_RESPOSTA_PLAUSIVEL = 15
+
 
 @dataclass
 class RespostaAgente:
@@ -132,8 +145,19 @@ class ConversationAgent:
         if not resposta.sucesso or not resposta.conteudo.strip():
             return None
 
+        texto = self._higienizar(resposta.conteudo)
+
+        if len(texto) < _TAMANHO_MINIMO_RESPOSTA_PLAUSIVEL:
+            logger.warning(
+                "Resposta do LLM implausivelmente curta (%d caracteres): "
+                "%r — tratando como falha e recorrendo ao motor "
+                "determinístico.",
+                len(texto), texto,
+            )
+            return None
+
         return RespostaAgente(
-            texto=self._higienizar(resposta.conteudo),
+            texto=texto,
             origem="llm",
             modelo=resposta.modelo,
             latencia_ms=resposta.latencia_ms,
