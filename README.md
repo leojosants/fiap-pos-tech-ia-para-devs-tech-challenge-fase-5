@@ -11,13 +11,14 @@ um resumo estruturado para o corretor humano.
 > ✅ **Projeto concluído.** As 8 etapas foram fechadas, com 657 testes
 > automatizados passando e a aplicação publicada e validada em
 > produção: **[casalead-sdr-imobiliario-fase-5.streamlit.app](https://casalead-sdr-imobiliario-fase-5.streamlit.app/)**
+> · **[Vídeo de apresentação (15 min)](https://youtu.be/Q3UpjTLiw9Y)**
 
 ---
 
 ## 📋 Índice
 
 - [🏠 CasaLead — Agente SDR Imobiliário com IA Generativa](#-casalead--agente-sdr-imobiliário-com-ia-generativa)
-  - [FIAP | Pós Tech em IA para Devs — Hackathon](#fiap--pós-tech-em-ia-para-devs--hackathon)
+    - [FIAP | Pós Tech em IA para Devs — Hackathon](#fiap--pós-tech-em-ia-para-devs--hackathon)
   - [📋 Índice](#-índice)
   - [🎯 O Problema](#-o-problema)
   - [💡 A Solução](#-a-solução)
@@ -108,6 +109,7 @@ aluguel):
 </table>
 
 **Experimente ao vivo:** [casalead-sdr-imobiliario-fase-5.streamlit.app](https://casalead-sdr-imobiliario-fase-5.streamlit.app/)
+**Vídeo de apresentação (15 min):** [youtu.be/Q3UpjTLiw9Y](https://youtu.be/Q3UpjTLiw9Y)
 
 ---
 
@@ -350,7 +352,7 @@ Ver [decisões técnicas](casaLead--agente-sdr-imobiliario-com-ia-generativa/doc
 ### Passo 1 — Clonar o repositório
 
 ```bash
-git clone git@github.com:leojosants/fiap-pos-tech-ia-para-devs-tech-challenge-fase-5.git
+git clone https://github.com/leojosants/fiap-pos-tech-ia-para-devs-tech-challenge-fase-5.git
 cd fiap-pos-tech-ia-para-devs-tech-challenge-fase-5/casaLead--agente-sdr-imobiliario-com-ia-generativa
 ```
 

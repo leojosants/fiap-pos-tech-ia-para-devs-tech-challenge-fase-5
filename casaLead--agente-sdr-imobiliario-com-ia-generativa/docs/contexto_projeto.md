@@ -5,8 +5,9 @@
 > Atualize ao final de cada etapa concluída.
 
 **Última atualização:** fim da Etapa 8 — **projeto concluído**
-**Repositório:** `git@github.com:leojosants/fiap-pos-tech-ia-para-devs-tech-challenge-fase-5.git`
+**Repositório:** [github.com/leojosants/fiap-pos-tech-ia-para-devs-tech-challenge-fase-5](https://github.com/leojosants/fiap-pos-tech-ia-para-devs-tech-challenge-fase-5) (`https://github.com/leojosants/fiap-pos-tech-ia-para-devs-tech-challenge-fase-5.git`)
 **Aplicação publicada:** [casalead-sdr-imobiliario-fase-5.streamlit.app](https://casalead-sdr-imobiliario-fase-5.streamlit.app/)
+**Vídeo de apresentação (15 min):** [youtu.be/Q3UpjTLiw9Y](https://youtu.be/Q3UpjTLiw9Y)
 **Branch de trabalho:** `development` (múltiplos merges fast-forward para `main` ocorreram ao longo da Etapa 8 — não só um único merge final; branch estável mantida sincronizada a cada marco relevante: requirements.txt, correções de deploy, relatório técnico)
 
 > **Reorganização de pastas (Etapa 7):** todo o código-fonte do projeto
@@ -28,7 +29,7 @@
 | Projeto | CasaLead — Agente SDR Imobiliário com IA Generativa |
 | Aluno | Leonardo José de Oliveira Santos — RM369985 |
 | Curso | FIAP — Pós Tech em IA para Devs (Hackathon) |
-| Padrão de entrega quanto a README robusto, relatório técnico em PDF e app publicada. **Decisão revisada nesta etapa:** esta entrega incluirá vídeo de apresentação, gravado a partir do link em produção — diferente da Fase 4, que não teve vídeo por falta de recursos de hardware (desafio rodava só local, sem app publicada)
+| Padrão de entrega | Mesmo do Tech Challenge Fase 4 (MedWatch) quanto a README robusto, relatório técnico em PDF e app publicada. **Decisão revisada nesta etapa:** esta entrega inclui vídeo de apresentação de 15 minutos, gravado a partir do link em produção — [youtu.be/Q3UpjTLiw9Y](https://youtu.be/Q3UpjTLiw9Y) — diferente da Fase 4, que não teve vídeo por falta de recursos de hardware (desafio rodava só local, sem app publicada) |
 
 ## 2. Ambiente confirmado
 
