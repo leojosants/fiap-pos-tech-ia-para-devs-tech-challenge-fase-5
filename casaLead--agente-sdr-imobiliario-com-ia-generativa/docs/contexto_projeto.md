@@ -4,9 +4,10 @@
 > Instruções do Projeto, para retomar o desenvolvimento sem perda de contexto.
 > Atualize ao final de cada etapa concluída.
 
-**Última atualização:** fim da Etapa 7
+**Última atualização:** fim da Etapa 8 — **projeto concluído**
 **Repositório:** `git@github.com:leojosants/fiap-pos-tech-ia-para-devs-tech-challenge-fase-5.git`
-**Branch de trabalho:** `development` (merge para `main` apenas na entrega final)
+**Aplicação publicada:** [casalead-sdr-imobiliario-fase-5.streamlit.app](https://casalead-sdr-imobiliario-fase-5.streamlit.app/)
+**Branch de trabalho:** `development` (múltiplos merges fast-forward para `main` ocorreram ao longo da Etapa 8 — não só um único merge final; branch estável mantida sincronizada a cada marco relevante: requirements.txt, correções de deploy, relatório técnico)
 
 > **Reorganização de pastas (Etapa 7):** todo o código-fonte do projeto
 > foi movido para dentro de `casaLead--agente-sdr-imobiliario-com-ia-generativa/`,
@@ -38,6 +39,15 @@ git 2.45.2.windows.1
 Windows · PowerShell e Git Bash
 Diretório: D:\REPOS-GITHUB-PUBLICO\fiap-pos-tech-ia-para-devs-tech-challenge-fase-5\casaLead--agente-sdr-imobiliario-com-ia-generativa
 ```
+
+> **Nota (Etapa 8):** o ambiente local do aluno continua em `3.12.9`
+> exato — isso não mudou. O que mudou foi a exigência gravada nos
+> arquivos do projeto: `.python-version` e `requires-python`
+> (`pyproject.toml`) foram relaxados de `3.12.9` (patch exato) para
+> `3.12` (a série), porque o patch exato bloqueava o deploy no
+> Streamlit Cloud — `uv` não tinha esse patch específico entre os
+> interpretadores geridos disponíveis lá. Ver
+> `docs/decisoes_tecnicas.md`, Bugs item 33.
 
 **Regras operacionais:**
 
@@ -78,7 +88,7 @@ Diretório: D:\REPOS-GITHUB-PUBLICO\fiap-pos-tech-ia-para-devs-tech-challenge-fa
 | 5 | Classificação e priorização de leads | ✅ |
 | 6 | Agendamento, follow-up e resumo | ✅ |
 | 7 | Dashboard e observabilidade | ✅ |
-| 8 | Testes, documentação e deploy | ⬜ **próxima** |
+| 8 | Testes, documentação e deploy | ✅ |
 
 ### Requisitos do enunciado
 
@@ -107,8 +117,23 @@ Diretório: D:\REPOS-GITHUB-PUBLICO\fiap-pos-tech-ia-para-devs-tech-challenge-fa
     │   ├── seed/properties.json        # 60 imóveis sintéticos (versionado)
     │   └── runtime/casalead.db         # banco gerado (gitignored)
     ├── docs/
-    │   ├── decisoes_tecnicas.md        # decisões, bugs, limitações, métricas
-    │   └── contexto_projeto.md         # este documento
+    │   ├── decisoes_tecnicas.md        # decisões, bugs, limitações, métricas — ALTERADO (Etapa 8)
+    │   ├── contexto_projeto.md         # este documento
+    │   ├── relatorio_tecnico.md        # relatório técnico final — NOVO (Etapa 8)
+    │   └── imagens/                     # 13 capturas do app publicado — NOVO (Etapa 8)
+    │       ├── chat_tela_inicial.png
+    │       ├── chat_qualificacao_compra.png
+    │       ├── cards_imoveis_recomendados.png
+    │       ├── chat_qualificacao_aluguel.png
+    │       ├── agendamento_confirmado.png
+    │       ├── chat_qualificacao_investimento.png
+    │       ├── imovel_investimento_recomendado.png
+    │       ├── painel_corretor_followup.png
+    │       ├── painel_corretor_agenda_resumos.png
+    │       ├── painel_corretor_resumos_detalhados.png
+    │       ├── dashboard_funil_status_temperatura.png
+    │       ├── dashboard_intencao_eventos.png
+    │       └── dashboard_uso_llm.png
     ├── scripts/
     │   ├── generate_properties.py      # gerador determinístico (seed=369985)
     │   ├── validar_scoring.py          # inspeção manual do scoring (Etapa 5)
@@ -118,9 +143,9 @@ Diretório: D:\REPOS-GITHUB-PUBLICO\fiap-pos-tech-ia-para-devs-tech-challenge-fa
     │   ├── core/
     │   │   ├── enums.py                # Intent, LeadStatus, Zone, EventType...
     │   │   ├── models.py               # Lead, Property, Conversation, Message, Appointment, Followup, Event
-    │   │   └── config.py               # Settings + detecção de modo demo
+    │   │   └── config.py               # Settings + detecção de modo demo — ALTERADO (Etapa 8: caminho padrão do banco ancorado em __file__)
     │   ├── persistence/
-    │   │   ├── database.py             # schema (7 tabelas) + bootstrap idempotente
+    │   │   ├── database.py             # schema (7 tabelas) + bootstrap idempotente — ALTERADO (Etapa 8: caminhos de banco/seed ancorados em __file__, não mais relativos ao CWD)
     │   │   ├── property_repository.py  # busca estruturada + investimento
     │   │   ├── lead_repository.py      # CRUD + estatísticas de funil + buscar_inativos()
     │   │   ├── conversation_repository.py  # conversas, mensagens, eventos
@@ -129,12 +154,12 @@ Diretório: D:\REPOS-GITHUB-PUBLICO\fiap-pos-tech-ia-para-devs-tech-challenge-fa
     │   ├── llm/
     │   │   ├── groq_client.py          # cliente + retry + UsageStats (inclui resumir())
     │   │   ├── prompts.py              # persona Sofia, roteiros, PROMPT_EXTRACAO, PROMPT_RESUMO_CORRETOR
-    │   │   └── demo_engine.py          # motor determinístico + detectores regex
+    │   │   └── demo_engine.py          # motor determinístico + detectores regex — ALTERADO (Etapa 8: corrigida a chave "vila olímpica" → "vila olímpia" em `_BAIRROS_CONHECIDOS`)
     │   ├── agents/
     │   │   ├── qualification_agent.py  # extração híbrida regex + LLM
-    │   │   ├── conversation_agent.py   # geração de fala + fallback
+    │   │   ├── conversation_agent.py   # geração de fala + fallback — ALTERADO (Etapa 8: guarda contra resposta do LLM implausivelmente curta)
     │   │   ├── scheduling_agent.py     # interpretação de disponibilidade
-    │   │   └── orchestrator.py         # coordenação do turno + propriedades públicas — ALTERADO (Etapa 7)
+    │   │   └── orchestrator.py         # coordenação do turno + propriedades públicas
     │   ├── followup/
     │   │   └── followup_manager.py     # reengajamento de leads inativos
     │   ├── reporting/
@@ -147,16 +172,16 @@ Diretório: D:\REPOS-GITHUB-PUBLICO\fiap-pos-tech-ia-para-devs-tech-challenge-fa
     │   │   ├── rules.py                # regras explícitas puras + ResultadoScoring
     │   │   └── builder.py              # constrói ContextoScoring (única parte impura)
     │   ├── observability/
-    │   │   └── metrics.py              # agregação de estatísticas p/ dashboard — NOVO (Etapa 7)
+    │   │   └── metrics.py              # agregação de estatísticas p/ dashboard
     │   └── ui/
     │       ├── state.py                # gestão de session_state
     │       ├── page_chat.py            # página de atendimento
-    │       ├── page_dashboard.py       # funil, eventos, uso de LLM — NOVO (Etapa 7)
-    │       ├── page_broker.py          # resumos, agenda, gatilho de follow-up — NOVO (Etapa 7)
+    │       ├── page_dashboard.py       # funil, eventos, uso de LLM
+    │       ├── page_broker.py          # resumos, agenda, gatilho de follow-up
     │       └── components/
-    │           ├── qualification_panel.py  # + score/temperatura — ALTERADO (Etapa 7)
+    │           ├── qualification_panel.py
     │           └── property_card.py
-    ├── tests/
+    ├── tests/                          # 657 testes no total (era 250 ao fim da Etapa 7) — 12 arquivos novos na Etapa 8
     │   ├── test_property_repository.py         # 21 testes
     │   ├── test_scoring_rules.py                # 6 testes — motor puro, sem banco
     │   ├── test_scoring_builder.py              # 2 testes — integração com SQLite real
@@ -166,7 +191,7 @@ Diretório: D:\REPOS-GITHUB-PUBLICO\fiap-pos-tech-ia-para-devs-tech-challenge-fa
     │   ├── test_followup_manager.py             # 25 testes
     │   ├── test_prompts.py                      # 9 testes
     │   ├── test_prompts_resumo.py               # 13 testes
-    │   ├── test_conversation_agent.py           # 5 testes
+    │   ├── test_conversation_agent.py           # 8 testes — +3 NOVO (Etapa 8: guarda de resposta curta)
     │   ├── test_summarizer.py                   # 16 testes
     │   ├── test_orchestrator_scheduling.py      # 8 testes
     │   ├── test_orchestrator_summary_followup.py  # 11 testes
@@ -174,25 +199,41 @@ Diretório: D:\REPOS-GITHUB-PUBLICO\fiap-pos-tech-ia-para-devs-tech-challenge-fa
     │   ├── test_orchestrator_contexto_extracao.py # 5 testes
     │   ├── test_page_chat_escape.py                # 6 testes
     │   ├── test_prompts_contato.py                 # 6 testes
-    │   ├── test_metrics.py                         # 7 testes — NOVO (Etapa 7)
-    │   ├── test_orchestrator_properties.py         # 8 testes — NOVO (Etapa 7)
-    │   ├── test_page_dashboard.py                  # 5 testes — NOVO (Etapa 7)
-    │   ├── test_page_broker.py                     # 4 testes — NOVO (Etapa 7)
-    │   └── test_qualification_panel.py             # 5 testes — NOVO (Etapa 7)
+    │   ├── test_metrics.py                         # 7 testes
+    │   ├── test_orchestrator_properties.py         # 8 testes
+    │   ├── test_page_dashboard.py                  # 5 testes
+    │   ├── test_page_broker.py                     # 4 testes
+    │   ├── test_qualification_panel.py             # 5 testes
+    │   ├── test_enums.py                           # 21 testes — NOVO (Etapa 8)
+    │   ├── test_models.py                          # 32 testes — NOVO (Etapa 8)
+    │   ├── test_config.py                          # 19 testes — NOVO (Etapa 8)
+    │   ├── test_database.py                        # 19 testes — NOVO (Etapa 8)
+    │   ├── test_lead_repository.py                 # 37 testes — NOVO (Etapa 8)
+    │   ├── test_conversation_repository.py         # 36 testes — NOVO (Etapa 8)
+    │   ├── test_retriever.py                       # 25 testes — NOVO (Etapa 8)
+    │   ├── test_ranker.py                          # 54 testes — NOVO (Etapa 8)
+    │   ├── test_demo_engine.py                     # 70 testes — NOVO (Etapa 8)
+    │   ├── test_qualification_agent.py             # 49 testes — NOVO (Etapa 8)
+    │   ├── test_groq_client.py                     # 31 testes — NOVO (Etapa 8)
+    │   └── test_ui_helpers.py                      # 11 testes — NOVO (Etapa 8)
     ├── .env.example
     ├── .gitattributes
-    ├── main.py                         # + navegação multipágina (st.navigation) — ALTERADO (Etapa 7)
-    └── pyproject.toml
+    ├── .python-version                 # ALTERADO (Etapa 8: 3.12.9 → 3.12, ver Bugs item 33)
+    ├── main.py                         # navegação multipágina (st.navigation)
+    ├── requirements.txt                # NOVO (Etapa 8) — gerado via `uv export`, para o Streamlit Cloud
+    ├── pyproject.toml                  # ALTERADO (Etapa 8: requires-python 3.12.9 → 3.12)
+    └── uv.lock                         # ALTERADO (Etapa 8: regenerado após relaxar requires-python)
 ```
 
-**Pastas que deixaram de estar vazias:** `src/observability/` — agora contém `metrics.py`.
+**Pastas que deixaram de estar vazias:** `docs/imagens/` — agora contém as
+13 capturas de tela do app publicado.
 
 ---
 
 ## 6. Arquitetura em uma página
 
 ```md
-INTERFACE (Streamlit, navegação multipágina st.navigation — Etapa 7)
+INTERFACE (Streamlit, navegação multipágina st.navigation)
   💬 Atendimento          📊 Dashboard           🧑‍💼 Corretor
   page_chat                page_dashboard         page_broker
   qualification_panel      (funil, eventos,       (resumos, agenda,
@@ -200,7 +241,7 @@ INTERFACE (Streamlit, navegação multipágina st.navigation — Etapa 7)
          ↓ ResultadoTurno        ↓                       ↓
          │              leitura via propriedades públicas do Orchestrator
          │              (leads, conversas, agendamentos, followups,
-         │              imoveis, cliente — Etapa 7) → src.observability.metrics
+         │              imoveis, cliente) → src.observability.metrics
          ↓                                              ↓
 ORQUESTRADOR  ← única porta de entrada do domínio (escrita E leitura pública)
   persiste entrada → qualifica → recomenda → agenda → pontua
@@ -212,10 +253,10 @@ AGENTES                          PERSISTÊNCIA
   scheduling_agent                 conversation_repository
   followup_manager (sem            appointment_repository
    background real — chamado       followup_repository
-   por botão na UI, Etapa 7,
-   ou script; ver limitação 33)
+   por botão na UI, ou script;
+   ver limitação 33)
          ↓                              ↓
-CAMADA DE IA                     SQLite (9 tabelas)
+CAMADA DE IA                     SQLite (7 tabelas)
   groq_client · prompts             + seed versionado
   demo_engine
          ↓
@@ -268,6 +309,11 @@ firmada na seção 10.
 | Navegação multipágina via `st.navigation`/`st.Page` | Escolhida sobre `st.sidebar.radio` por gerar URL própria por página (`/_pagina_dashboard`, `/_pagina_corretor`) — ajuda na demonstração para a banca e é o mecanismo nativo do Streamlit desde a 1.36 |
 | Threshold de follow-up com atalho de demonstração | Campo numérico de horas (padrão 24, comportamento real) + atalho de 1 minuto, visível só em modo demonstrativo — permite mostrar o ciclo completo de follow-up ao vivo sem esperar 24h de verdade |
 | `pandas` usado sem declarar em `pyproject.toml` | Dependência obrigatória do próprio `streamlit` (não opcional — usada internamente por todo componente de dado/gráfico); `page_dashboard.py` importa o que o `streamlit` já garante, sem adicionar peso novo ao ambiente |
+| Mock do `GroqClient` nos testes (Etapa 8) | Constrói o SDK real (não faz chamada HTTP), substitui só `self._client` por `Mock()` — não mocka o import `groq` inteiro, para não mascarar uma eventual mudança incompatível de assinatura |
+| `requirements.txt` sem hashes de integridade (Etapa 8) | Versão com hash: 948 linhas, desproporcional para POC acadêmica; sem hash, mantendo anotações `# via`: 150 linhas, mesma rastreabilidade |
+| `.python-version`/`requires-python` na série `3.12`, não no patch (Etapa 8) | Patch exato (`3.12.9`) indisponível entre os interpretadores geridos pelo Streamlit Cloud — bloqueava o deploy (ver Bugs item 33) |
+| Caminhos padrão de banco/seed ancorados em `Path(__file__)` (Etapa 8) | Caminho relativo resolve contra o CWD do processo; Streamlit Cloud roda a partir da raiz do repositório Git, não da subpasta do projeto (ver Bugs item 34) |
+| Guarda de tamanho mínimo (15 caracteres) para resposta do LLM (Etapa 8) | Resposta implausivelmente curta observada uma vez em produção, causa raiz não identificada; guarda degrada para o motor determinístico independente da causa (ver Bugs item 35) |
 
 ---
 
@@ -424,12 +470,76 @@ Sete blocos de teste executados na UI, com ~23 bugs encontrados e corrigidos:
 
 ---
 
-## 12. Etapa 8 — planejada
+## 12. Etapa 8 — concluída
 
-- Ampliar `tests/` (demo_engine, qualification_agent, ranker, groq_client)
-- `requirements.txt` gerado do lock para o Streamlit Cloud
-- Relatório técnico em PDF a partir de `docs/decisoes_tecnicas.md`
-- Merge `development` → `main` e deploy
+**Objetivo alcançado:** ampliação da suíte de testes automatizados a
+módulos sem cobertura dedicada, geração dos artefatos de deploy,
+relatório técnico completo com evidências visuais, e publicação da
+aplicação no Streamlit Community Cloud — última etapa do projeto.
+
+**Ordem de implementação:** 12 arquivos de teste (do mais simples/puro
+ao mais complexo: `enums` → `models` → `config` → `database` →
+`lead_repository` → `conversation_repository` → `retriever` →
+`ranker` → `demo_engine` → `qualification_agent` → `groq_client` →
+`ui_helpers`) → `requirements.txt` → rascunho do relatório técnico em
+Markdown → merge `development` → `main` → deploy no Streamlit Cloud →
+três bugs de deploy corrigidos em sequência → validação manual
+completa com capturas de tela → relatório técnico finalizado →
+`decisoes_tecnicas.md` e `contexto_projeto.md` atualizados.
+
+**Arquivos novos:**
+
+- 12 arquivos de teste (`tests/test_enums.py` ... `tests/test_ui_helpers.py`) — contagem completa na estrutura do repositório (seção 5)
+- `requirements.txt` — gerado via `uv export --format requirements-txt --no-dev --frozen --no-hashes`
+- `docs/relatorio_tecnico.md` — documento único, ~9.600 palavras, 17 seções, 13 imagens embutidas
+- `docs/imagens/*.png` — 13 capturas de tela do app publicado
+
+**Arquivos modificados:**
+
+- `src/persistence/database.py` — `DEFAULT_DB_PATH`/`SEED_PROPERTIES` ancorados em `Path(__file__)` (bug de deploy, item 34)
+- `src/core/config.py` — mesmo ajuste para `DEFAULT_DB_PATH`
+- `src/llm/demo_engine.py` — corrigida a chave `"vila olímpica"` → `"vila olímpia"` em `_BAIRROS_CONHECIDOS` (bug 32)
+- `src/agents/conversation_agent.py` — guarda contra resposta do LLM implausivelmente curta (bug 35)
+- `.python-version`, `pyproject.toml`, `uv.lock` — versão do Python relaxada de patch exato (`3.12.9`) para a série (`3.12`) (bug 33)
+
+**Testes:** 12 arquivos novos, 404 testes novos, mais 3 testes de
+regressão adicionados durante o deploy (guarda de resposta curta) —
+407 testes novos no total. Suíte final: **657 testes** (250 ao fim da
+Etapa 7), nenhum dependente de rede ou de chave de API real — o
+cliente Groq é mockado em todos os testes que o exercitam.
+
+**Cinco bugs reais encontrados durante a etapa** (causa e correção
+completas em `docs/decisoes_tecnicas.md`, itens 31–35):
+
+1. Teste de configuração comparava `Path` com string de barra fixa — passava no Linux (ambiente de desenvolvimento), falhava no Windows (ambiente real do aluno). Bug do teste, não do código-fonte
+2. Chave `"vila olímpica"` (com "c" a mais) no dicionário de bairros conhecidos — a grafia correta do bairro nunca era reconhecida pelo motor determinístico. Bug real de produção, encontrado ao escrever o teste, não pelo teste já pronto
+3. Deploy falhava na instalação de dependências: patch exato do Python (`3.12.9`) indisponível entre os interpretadores geridos pelo Streamlit Cloud
+4. `FileNotFoundError` ao iniciar o app publicado: caminhos relativos resolviam contra a raiz do repositório Git, não contra a subpasta do projeto
+5. Resposta do LLM truncada em 3 caracteres ("Ent") em produção — causa raiz não identificada (intermitente, não reproduzida numa segunda tentativa), mitigada com guarda defensiva
+
+**Validação manual na interface: concluída**, já na aplicação
+publicada ([casalead-sdr-imobiliario-fase-5.streamlit.app](https://casalead-sdr-imobiliario-fase-5.streamlit.app/)),
+com chave de API real (`DEMO_MODE=false`):
+
+- Cenário de compra — qualificação completa em 3 turnos, score 77/100, quente
+- Cenário de aluguel — qualificação completa, agendamento com data e horário concretos confirmado ("sexta-feira, 28/08, às 15h00")
+- Cenário de investimento — qualificação completa, recomendações com relaxamento de filtros em ação
+- Painel do corretor — verificação de follow-up (sem falso positivo com o limiar padrão de 24h), agenda com 2 compromissos, resumos gerados por LLM para os leads qualificados
+- Dashboard — funil (5 leads), eventos do sistema (9 tipos), uso de LLM (24 chamadas, 100% de sucesso, 941ms de latência média, 35.264 tokens)
+- Recarregamento no meio de uma conversa (F5) — reinicia limpo, sem travar (comportamento esperado, não bug)
+
+**Observação registrada durante a validação, não uma correção:** a
+saída de emergência para intenção ambígua é regra determinística de
+código no motor demonstrativo, mas só uma instrução de prompt no modo
+LLM — com apenas duas respostas ambíguas, o modo LLM ainda insistiu
+perguntando a intenção. Registrado como limitação (item 49), não
+corrigido nesta etapa.
+
+**Decisão que atravessa a etapa:** nenhum dos três bugs de deploy foi
+encontrado pela suíte de testes automatizados — reforça que cobertura
+de código não é o mesmo que cobertura de ambiente de execução; a
+validação manual no ambiente de deploy real continua insubstituível
+para essa classe de problema.
 
 ---
 
@@ -450,16 +560,34 @@ Sete blocos de teste executados na UI, com ~23 bugs encontrados e corrigidos:
 | Telefone/e-mail nunca coletados | Nenhum ponto do sistema pergunta ou extrai contato do lead — decisão consciente (Opção B: ajuste de texto, não coleta de dado), registrada em `decisoes_tecnicas.md` seção 6e (pós-validação manual) |
 | Voice AI (entrada por voz) | Avaliada tecnicamente como viável (Groq Whisper + `st.audio_input`), adiada deliberadamente — sem TTS, só entrada (pós-validação manual) |
 | Uso de LLM no dashboard é por sessão | `GroqClient.stats` acumula em memória desde que o processo Streamlit começou — não é histórico persistido; já sinalizado na própria tela (pendência nova da Etapa 7) |
-| Histórico de `git mv` de `__init__.py` vazios | Não ficou perfeitamente limpo na reorganização de pastas — Git emparelhou deleção/criação de forma um pouco aleatória entre arquivos idênticos; cosmético, sem efeito em conteúdo (pendência nova da Etapa 7) |
+| Histórico de `git mv` de `__init__.py` vazios | Não ficou perfeitamente limpo na reorganização de pastas — Git emparelhou deleção/criação de forma um pouco aleatória entre arquivos idênticos; cosmético, sem efeito em conteúdo (pendência da Etapa 7) |
+| Causa raiz da resposta implausivelmente curta | Observada uma vez em produção na Etapa 8 (bug 35) — intermitente, não reproduzida numa segunda tentativa. Mitigada com guarda defensiva (degrada para o motor determinístico), mas a causa de origem permanece sem explicação confirmada (pendência nova da Etapa 8) |
+| Lacuna de cobertura de teste — caminhos padrão a partir de CWD diferente | Nenhum teste automatizado exercita `DEFAULT_DB_PATH`/`SEED_PROPERTIES` a partir de um diretório de trabalho diferente da pasta do projeto — o bug de produção correspondente (item 34) só foi encontrado no deploy real (pendência nova da Etapa 8) |
+| Saída de emergência de intenção mais frágil no modo LLM | Regra determinística de código no motor demonstrativo, mas só instrução de prompt (sem garantia) no modo LLM — observado na validação da Etapa 8 (pendência nova da Etapa 8) |
 | Data de entrega | Não informada nesta sessão |
 
 ---
 
 ## 14. Como retomar
 
-1. Colar as **Instruções do Projeto** (o bloco longo com os 16 itens).
-2. Colar este documento
-3. Informar a etapa desejada — provavelmente **Etapa 8**
-4. Se necessário, enviar `docs/decisoes_tecnicas.md` para o histórico completo de decisões e bugs
+O projeto está **concluído** — todas as 8 etapas fechadas, suíte de
+testes passando (657/657), aplicação publicada e validada
+manualmente. Este documento continua útil para dois cenários:
 
-**Forma de trabalho estabelecida:** passo a passo, com explicação de cada decisão técnica, alternativas descartadas e limitações; validação por execução real de teste (`uv run pytest`) antes de considerar um arquivo fechado; commit sugerido ao final de cada arquivo; confirmação explícita antes de avançar de etapa — nenhuma etapa começa sem ordem direta, mesmo que a anterior tenha fechado.
+1. **Preparar a defesa/apresentação:** colar este documento e
+   `docs/decisoes_tecnicas.md` numa nova conversa dá o contexto
+   completo para simular perguntas da banca, revisar qualquer decisão
+   técnica específica, ou gerar material de apoio.
+2. **Retomar para evolução futura:** a Seção 16 do relatório técnico
+   (`docs/relatorio_tecnico.md`) e a tabela de "Limitações conhecidas"
+   de `docs/decisoes_tecnicas.md` (49 itens) já mapeiam os próximos
+   passos mais óbvios — recalibração de constantes por dado real,
+   Voice AI, integração com WhatsApp/CRM, entre outros avaliados e
+   deliberadamente adiados.
+
+**Forma de trabalho estabelecida** (válida para qualquer retomada):
+passo a passo, com explicação de cada decisão técnica, alternativas
+descartadas e limitações; validação por execução real de teste
+(`uv run pytest`) antes de considerar um arquivo fechado; commit
+sugerido ao final de cada arquivo; confirmação explícita antes de
+ações irreversíveis ou de alto impacto (merge para `main`, deploy).

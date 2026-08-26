@@ -8,18 +8,20 @@ Atende leads automaticamente, identifica a intenção do cliente
 imóveis de uma base simulada, agenda visitas, realiza follow-up e gera
 um resumo estruturado para o corretor humano.
 
-> 🚧 **Projeto em desenvolvimento.** Este README é um documento vivo e
-> será atualizado a cada etapa concluída.
+> ✅ **Projeto concluído.** As 8 etapas foram fechadas, com 657 testes
+> automatizados passando e a aplicação publicada e validada em
+> produção: **[casalead-sdr-imobiliario-fase-5.streamlit.app](https://casalead-sdr-imobiliario-fase-5.streamlit.app/)**
 
 ---
 
 ## 📋 Índice
 
 - [🏠 CasaLead — Agente SDR Imobiliário com IA Generativa](#-casalead--agente-sdr-imobiliário-com-ia-generativa)
-    - [FIAP | Pós Tech em IA para Devs — Hackathon](#fiap--pós-tech-em-ia-para-devs--hackathon)
+  - [FIAP | Pós Tech em IA para Devs — Hackathon](#fiap--pós-tech-em-ia-para-devs--hackathon)
   - [📋 Índice](#-índice)
   - [🎯 O Problema](#-o-problema)
   - [💡 A Solução](#-a-solução)
+  - [📸 Demonstração](#-demonstração)
   - [✨ Funcionalidades](#-funcionalidades)
   - [🏗️ Arquitetura](#️-arquitetura)
     - [Responsabilidade de cada componente](#responsabilidade-de-cada-componente)
@@ -42,7 +44,9 @@ um resumo estruturado para o corretor humano.
     - [Executar sem chave de API](#executar-sem-chave-de-api)
   - [🔐 Variáveis de Ambiente](#-variáveis-de-ambiente)
   - [🧪 Testes](#-testes)
+  - [☁️ Deploy](#️-deploy)
   - [📐 Decisões Técnicas](#-decisões-técnicas)
+  - [📄 Relatório Técnico](#-relatório-técnico)
   - [⚠️ Limitações Conhecidas](#️-limitações-conhecidas)
   - [🚀 Melhorias Futuras](#-melhorias-futuras)
   - [🎓 Autor](#-autor)
@@ -71,6 +75,42 @@ etapa menos qualificada do funil.
 
 ---
 
+## 📸 Demonstração
+
+Capturas de tela reais da aplicação publicada — não do ambiente local.
+Mais 10 imagens, cobrindo os três cenários do enunciado, o painel do
+corretor e o dashboard, estão em
+[docs/relatorio_tecnico.md](casaLead--agente-sdr-imobiliario-com-ia-generativa/docs/relatorio_tecnico.md).
+
+**Tela inicial** — painel de qualificação zerado, três sugestões de
+início mapeadas aos três cenários do enunciado (compra, investimento,
+aluguel):
+
+![Tela inicial do CasaLead](casaLead--agente-sdr-imobiliario-com-ia-generativa/docs/imagens/chat_tela_inicial.png)
+
+<table>
+<tr>
+<td width="50%">
+
+**Qualificação completa (compra)**
+
+![Conversa de compra qualificada](casaLead--agente-sdr-imobiliario-com-ia-generativa/docs/imagens/chat_qualificacao_compra.png)
+
+</td>
+<td width="50%">
+
+**Dashboard — funil de leads**
+
+![Dashboard do CasaLead](casaLead--agente-sdr-imobiliario-com-ia-generativa/docs/imagens/dashboard_funil_status_temperatura.png)
+
+</td>
+</tr>
+</table>
+
+**Experimente ao vivo:** [casalead-sdr-imobiliario-fase-5.streamlit.app](https://casalead-sdr-imobiliario-fase-5.streamlit.app/)
+
+---
+
 ## ✨ Funcionalidades
 
 | # | Funcionalidade | Status |
@@ -95,43 +135,46 @@ etapa menos qualificada do funil.
 A solução é organizada em camadas com responsabilidades estritas. Nenhuma
 camada superior conhece os detalhes da inferior.
 
-┌─────────────────────────────────────────────────────┐
-│ INTERFACE (Streamlit) │
-│ page_chat · qualification_panel · state │
-└────────────────────┬────────────────────────────────┘
-│ ResultadoTurno
-┌────────────────────▼────────────────────────────────┐
-│ ORQUESTRADOR │
-│ Única porta de entrada do domínio. │
-│ Coordena o turno e persiste o resultado. │
-└──┬──────────────────────────────┬───────────────────┘
-│ │
-┌──▼───────────────────┐ ┌──────▼──────────────────┐
-│ AGENTES │ │ PERSISTÊNCIA │
-│ ├ qualification │ │ ├ lead_repository │
-│ ├ conversation │ │ ├ property_repository │
-│ └ scheduling 🔜 │ │ └ conversation_repo │
-└──┬───────────────────┘ └──────┬──────────────────┘
-│ │
-┌──▼───────────────────┐ ┌──────▼──────────────────┐
-│ CAMADA DE IA │ │ SQLite │
-│ ├ groq_client │ │ 7 tabelas │
-│ ├ prompts │ │ + seed versionado │
-│ └ demo_engine │ └─────────────────────────┘
-└──────────────────────┘
+```
+INTERFACE (Streamlit, 3 páginas: 💬 Atendimento · 📊 Dashboard · 🧑‍💼 Corretor)
+        │ ResultadoTurno / leitura via propriedades públicas do Orchestrator
+        ▼
+ORQUESTRADOR — única porta de entrada do domínio (escrita E leitura)
+  persiste entrada → qualifica → recomenda → agenda → pontua
+    → resume (se necessário) → gera resposta → persiste saída
+        │
+        ├── AGENTES: qualification_agent · conversation_agent ·
+        │            scheduling_agent · followup_manager
+        │
+        ├── PERSISTÊNCIA: lead · property · conversation · appointment ·
+        │                  followup — repositório por entidade, SQLite (7 tabelas)
+        │
+        ├── CAMADA DE IA: groq_client (retry + métricas) · prompts ·
+        │                  demo_engine (fallback determinístico)
+        │
+        └── RECOMENDAÇÃO (RAG: retriever TF-IDF + ranker) ·
+            SCORING (regras explícitas, puro) ·
+            RESUMO (LLM → template)
+```
 
 ### Responsabilidade de cada componente
 
 | Componente | Responsabilidade |
 | --- | --- |
 | `ui/` | Renderização e estado de sessão. Não contém regra de negócio |
-| `agents/orchestrator` | Coordena o turno: persiste entrada, qualifica, gera resposta, persiste saída |
+| `agents/orchestrator` | Coordena o turno: persiste entrada, qualifica, recomenda, agenda, pontua, resume, gera resposta, persiste saída |
 | `agents/qualification_agent` | Extrai intenção e slots — regex + LLM com verificação cruzada |
 | `agents/conversation_agent` | Produz a fala do agente, com degradação automática para o modo determinístico |
+| `agents/scheduling_agent` | Interpreta disponibilidade e agenda — 100% determinístico, nunca usa LLM |
+| `followup/followup_manager` | Identifica leads inativos, reengaja (mensagem template) ou escala para atendimento humano |
+| `recommendation/` | Busca semântica (RAG via TF-IDF) e filtro estruturado — `retriever.py` + `ranker.py` |
+| `scoring/` | Score (0–100) e temperatura por regras explícitas — `rules.py` puro, `builder.py` acessa dado externo |
+| `reporting/summarizer` | Resumo para o corretor via LLM, com degradação para template estruturado |
+| `observability/metrics` | Agrega estatísticas já existentes nos repositórios para o dashboard, sem reimplementar |
 | `llm/groq_client` | Comunicação com a API, retry, timeout e coleta de métricas |
 | `llm/prompts` | Persona, roteiros por intenção e prompt de extração |
 | `llm/demo_engine` | Motor determinístico e detectores por padrão |
-| `persistence/` | Acesso a dados. Nenhum módulo acima conhece SQL |
+| `persistence/` | Acesso a dados (5 repositórios). Nenhum módulo acima conhece SQL |
 | `core/` | Modelos de domínio, enums e configuração |
 
 ### Degradação em dois níveis
@@ -148,22 +191,28 @@ O sistema mantém-se operante mesmo sem acesso ao provedor de LLM:
 ```md
 Entrada do lead
 ↓
-Persistência da mensagem ──────→ tabela messages
+Persistência da mensagem ──────────────→ tabela messages
 ↓
-Qualificação
-├ extração por padrões (regex)
-├ extração por LLM (quando necessário)
-└ verificação cruzada em campos numéricos
+Qualificação (regex + LLM, verificação cruzada em campos numéricos)
 ↓
-Atualização do lead ───────────→ tabela leads + events
+Atualização do lead ───────────────────→ tabela leads + events
+↓
+Recomendação de imóveis (filtro estruturado + busca semântica TF-IDF)
+↓
+Agendamento (interpretação determinística de disponibilidade, se houver)
+↓
+Scoring — score (0–100) e temperatura recalculados a cada turno
+↓
+Resumo para o corretor — só na transição de estado (lead fica quente,
+agendamento confirmado, ou follow-up escala), via LLM com degradação
 ↓
 Confirmação de intenção ambígua?
 ├ sim → pergunta determinística
-└ não → geração pelo LLM
+└ não → geração da fala pelo LLM (ou motor determinístico, se indisponível)
 ↓
-Persistência da resposta ──────→ tabela messages
+Persistência da resposta ──────────────→ tabela messages
 ↓
-ResultadoTurno ────────────────→ interface
+ResultadoTurno ─────────────────────────→ interface
 ```
 
 ### Critérios de qualificação
@@ -243,7 +292,7 @@ seu perfil ao nosso especialista em investimentos.
 
 | Camada | Tecnologia | Justificativa |
 | --- | --- | --- |
-| Linguagem | Python 3.12.9 | Ecossistema de IA e requisito do curso |
+| Linguagem | Python 3.12+ | Ecossistema de IA e requisito do curso |
 | Dependências | [`uv`](https://docs.astral.sh/uv/) | Resolução determinística via lockfile |
 | Interface | Streamlit | Chat e dashboard com baixo custo de implementação |
 | Persistência | SQLite (`sqlite3` puro) | Zero configuração; camada de repositório abstraída |
@@ -267,7 +316,9 @@ Ver [decisões técnicas](casaLead--agente-sdr-imobiliario-com-ia-generativa/doc
     │   └── runtime/                # banco SQLite (gerado, não versionado)
     ├── docs/
     │   ├── decisoes_tecnicas.md    # decisões, bugs e limitações
-    │   └── contexto_projeto.md     # estado do projeto por etapa
+    │   ├── contexto_projeto.md     # estado do projeto por etapa
+    │   ├── relatorio_tecnico.md    # relatório técnico final, com evidências visuais
+    │   └── imagens/                # capturas de tela do app publicado
     ├── scripts/
     │   └── generate_properties.py  # gerador determinístico da base
     ├── src/
@@ -281,8 +332,9 @@ Ver [decisões técnicas](casaLead--agente-sdr-imobiliario-com-ia-generativa/doc
     │   ├── scoring/                 # classificação e priorização de leads
     │   ├── observability/           # agregação de métricas para o dashboard
     │   └── ui/                      # páginas (atendimento, dashboard, corretor) e componentes
-    ├── tests/
-    └── main.py                     # ponto de entrada — navegação multipágina
+    ├── tests/                       # 657 testes, sem dependência de rede
+    ├── requirements.txt             # gerado via `uv export`, para o Streamlit Cloud
+    └── main.py                      # ponto de entrada — navegação multipágina
 ```
 
 ---
@@ -291,7 +343,7 @@ Ver [decisões técnicas](casaLead--agente-sdr-imobiliario-com-ia-generativa/doc
 
 ### Pré-requisitos
 
-- Python 3.12.9
+- Python 3.12 ou superior
 - [`uv`](https://docs.astral.sh/uv/) instalado
 - Chave gratuita da [Groq API](https://console.groq.com) *(opcional — há modo demonstrativo)*
 
@@ -369,6 +421,36 @@ apenas se ela está configurada.
 uv run pytest
 ```
 
+**657 testes automatizados**, nenhum dependente de rede ou de chave de
+API real — o cliente Groq é mockado em todos os testes que o
+exercitam (construído fora do modo demonstrativo, com `self._client`
+substituído por um `Mock()`, sem nenhuma chamada HTTP real).
+
+---
+
+## ☁️ Deploy
+
+Aplicação publicada no **Streamlit Community Cloud**, a partir da
+branch `main`:
+**[casalead-sdr-imobiliario-fase-5.streamlit.app](https://casalead-sdr-imobiliario-fase-5.streamlit.app/)**
+
+Para publicar uma instância própria:
+
+1. Em [share.streamlit.io](https://share.streamlit.io), "Create app" → "Deploy a public app from GitHub".
+2. Branch `main`; **main file path**: `casaLead--agente-sdr-imobiliario-com-ia-generativa/main.py` — o caminho completo é obrigatório, já que a aplicação não está na raiz do repositório.
+3. Em "Advanced settings" → Secrets:
+
+   ```toml
+   GROQ_API_KEY = "sua-chave-aqui"
+   DEMO_MODE = "false"
+   ```
+
+   Sem chave, ou com `DEMO_MODE = "true"`, o sistema opera integralmente no modo demonstrativo — uma demonstração igualmente válida, sem custo de API.
+
+Detalhe completo do processo, incluindo três bugs reais encontrados só
+no deploy (nenhum detectável localmente), em
+[docs/relatorio_tecnico.md](casaLead--agente-sdr-imobiliario-com-ia-generativa/docs/relatorio_tecnico.md#134-deploy-no-streamlit-community-cloud).
+
 ---
 
 ## 📐 Decisões Técnicas
@@ -378,6 +460,17 @@ consideradas e suas justificativas, estão registradas em
 **[docs/decisoes_tecnicas.md](casaLead--agente-sdr-imobiliario-com-ia-generativa/docs/decisoes_tecnicas.md)** — incluindo os
 bugs encontrados durante o desenvolvimento e os testes de segurança
 realizados.
+
+---
+
+## 📄 Relatório Técnico
+
+Documento único, com 17 seções e 13 imagens da aplicação em produção —
+arquitetura completa, decisões etapa a etapa, os 35 bugs reais
+encontrados e corrigidos (com causa raiz e correção de cada um),
+resultados consolidados, segurança e privacidade, e limitações
+conhecidas:
+**[docs/relatorio_tecnico.md](casaLead--agente-sdr-imobiliario-com-ia-generativa/docs/relatorio_tecnico.md)**
 
 ---
 
@@ -394,7 +487,7 @@ Principais limitações desta prova de conceito:
 - **Slots imutáveis** — apenas a intenção admite correção pelo lead; os
   demais campos, uma vez preenchidos, não são sobrescritos.
 
-A lista completa, com 46 itens e o módulo correspondente, está em
+A lista completa, com 49 itens e o módulo correspondente, está em
 [docs/decisoes_tecnicas.md](casaLead--agente-sdr-imobiliario-com-ia-generativa/docs/decisoes_tecnicas.md).
 
 ---

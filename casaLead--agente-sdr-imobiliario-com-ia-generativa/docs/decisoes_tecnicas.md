@@ -15,7 +15,7 @@ consideradas e justificativas. Base para o relatório técnico final.
 | Decisão | Alternativa descartada | Justificativa |
 | --- | --- | --- |
 | `uv` com `pyproject.toml` | `pip` + `requirements.txt` | Resolução determinística via lockfile; reprodutibilidade entre máquinas e no deploy |
-| `.python-version` fixado em 3.12.9 | Versão livre | Elimina divergência de comportamento entre local e Streamlit Cloud |
+| `.python-version` fixado na série `3.12` (não no patch exato) | Patch exato (`3.12.9`, gravado automaticamente pelo `uv init`) | Patch exato bloqueou o deploy no Streamlit Cloud — `uv` não tinha esse patch específico entre os interpretadores geridos (Etapa 8, ver Bugs item 33). Decisão revisada nesta etapa: a série inteira garante compatibilidade sem abrir mão de reprodutibilidade dentro do 3.12 |
 | Dependências incrementais | Instalar tudo no início | Cada biblioteca precisa de justificativa técnica; evita dependências órfãs |
 | `.gitattributes` com `eol=lf` | `core.autocrlf` local | Normalização viaja com o projeto, não depende da máquina de quem clona |
 
@@ -195,6 +195,39 @@ código seja de fato exibida. A regra já estava registrada em
 apenas confirmou isso na prática, ao investigar por que a exibição de
 score/temperatura não aparecia mesmo com o código e os testes corretos.
 
+## 6h. Testes, documentação e deploy (Etapa 8)
+
+| Decisão | Alternativa descartada | Justificativa |
+| --- | --- | --- |
+| 12 arquivos de teste novos, cobrindo módulos sem teste dedicado | Cobrir só os 4 originalmente planejados (`demo_engine`, `qualification_agent`, `ranker`, `groq_client`) | Levantamento inicial da etapa encontrou mais 8 módulos igualmente sem cobertura; ampliar custou pouco a mais e fechou a suíte de forma mais completa |
+| Mock do `GroqClient` construindo o SDK real e substituindo só `self._client` | Mockar o módulo `groq` inteiro via `unittest.mock.patch` | Construir o SDK real não faz chamada HTTP (só monta configuração local); mockar o import inteiro esconderia uma eventual mudança de assinatura incompatível de `Groq(...)` |
+| `requirements.txt` sem hashes de integridade | Manter hashes (padrão do `uv export`) | Com hash: 948 linhas (~70KB), desproporcional para uma POC acadêmica. Sem hash, mantendo anotações `# via` (rastreiam por que cada dependência transitiva existe): 150 linhas |
+| `uv export --frozen` | Deixar `uv export` atualizar o lockfile livremente | Garante que gerar `requirements.txt` é operação só de leitura, sem efeito colateral silencioso sobre o `uv.lock` já commitado |
+| `.python-version`/`requires-python` relaxados de patch exato para a série `3.12` | Manter patch exato, forçar o Streamlit Cloud a instalar esse patch específico | O Streamlit Cloud não tinha o patch `3.12.9` entre os interpretadores geridos pelo `uv`; patches de Python não adicionam funcionalidade nova, não havia razão real para a exigência ser tão específica (ver Bugs, item 33) |
+| Caminhos padrão ancorados em `Path(__file__).resolve().parent.parent.parent` | Caminho relativo simples (`Path("data/seed/...")`) | Caminho relativo resolve contra o diretório de trabalho do processo; o Streamlit Cloud executa a partir da raiz do repositório Git, não da subpasta do projeto (ver Bugs, item 34) |
+| Guarda de tamanho mínimo (15 caracteres) para resposta do LLM, tratando resposta curta demais como falha | Investigar a causa raiz antes de proteger o usuário | Causa raiz intermitente, não reproduzida numa segunda tentativa — sem garantia de ser encontrada antes do prazo de entrega; a guarda protege o usuário final independentemente da causa, consistente com a degradação honesta já firmada no projeto inteiro (seção 5) |
+| Capturas de tela do app publicado, não do ambiente local | Screenshots do `localhost` | Evidência mais forte para a banca: mostra a aplicação real, no ar, no mesmo endereço que qualquer pessoa pode acessar |
+| PDF do navegador ("Salvar como PDF") + rasterização automática, em vez de captura de tela manual | Print da tela (`PrtScn`) ou ferramenta de captura do SO | Captura a página inteira sem cortar por causa do scroll, sem elementos do sistema operacional, com timestamp e URL de produção no rodapé como evidência adicional |
+
+Depois da suíte automatizada (654 testes) fechar e do
+`requirements.txt` validado localmente, a Etapa 8 passou pelo processo
+de deploy no Streamlit Community Cloud — que revelou 3 bugs reais,
+nenhum detectável localmente nem pela suíte de testes, porque cada um
+só se manifesta num ambiente diferente do de desenvolvimento
+(interpretador Python gerido de forma diferente, diretório de trabalho
+do processo diferente, ou execução prolongada contra o provedor de LLM
+real). Ver Bugs, itens 33–35, para causa e correção de cada um.
+
+**Validação manual ponta a ponta**, já com os três bugs corrigidos e a
+aplicação publicada: os três cenários do enunciado (compra, aluguel,
+investimento) conduzidos do zero até qualificação completa, incluindo
+um agendamento com data e horário concretos confirmado pelo
+`SchedulingAgent`; painel do corretor (verificação de follow-up sem
+falso positivo, agenda, resumos gerados por LLM); dashboard (funil,
+eventos do sistema, uso de LLM); e recarregamento no meio de uma
+conversa (F5), confirmado como reinício limpo, sem travar nem exibir
+erro.
+
 ## 7. Interface
 
 | Decisão | Alternativa descartada | Justificativa |
@@ -243,6 +276,11 @@ no processo.
 | 28 | Três testes de `scheduling_agent`/`orchestrator` começaram a falhar sozinhos, sem nenhuma mudança de código | Data absoluta fixa (`datetime(2026, 8, 21, 15, 0)`) usada para simular "agendamento no futuro"; o relógio real alcançou essa data durante a sessão de testes, e `proximo_agendamento_do_lead()` compara contra `datetime.now()` real, não contra a `REFERENCIA` injetada | Datas trocadas por `datetime.now() + timedelta(days=2)`, que nunca expira |
 | 29 | Scripts de validação com banco próprio liam, sem saber, do banco padrão `casalead.db` para os imóveis | `Orchestrator.__init__` tinha `self._ranker = PropertyRanker()` sem repassar `db_path`, diferente de todos os outros repositórios do mesmo `__init__` | `PropertyRanker(self._imoveis)`, reaproveitando a instância já parametrizada corretamente |
 | 30 | Encerramento da conversa prometia contato ativo ("um corretor entra em contato em breve") que o sistema não tem como cumprir | `Lead.telefone`/`Lead.email` existem no modelo mas nenhum ponto do sistema (regex, LLM, roteiro) jamais os coleta | Texto de encerramento ajustado (determinístico e instrução do LLM) para não prometer contato ativo — "informações registradas com a equipe", sem afirmar que alguém vai ligar ou escrever |
+| 31 | Teste de configuração comparava `Path` com string de barra fixa (`"data/runtime/casalead.db"`) | `str(Path(...))` usa `/` no Linux e `\` no Windows; teste passava no ambiente de desenvolvimento (Linux) e falhava no ambiente real do aluno (Windows) | Comparação trocada para `Path` com `Path`, não `str` com string literal — bug do teste, não do código-fonte |
+| 32 | Bairro "Vila Olímpia" (grafia correta, acentuada) nunca reconhecido pelo motor determinístico | Chave do dicionário `_BAIRROS_CONHECIDOS` tinha um "c" a mais por engano: `"vila olímpica"` em vez de `"vila olímpia"` | Chave corrigida; teste de regressão dedicado garante que as duas grafias (com e sem acento) funcionem |
+| 33 | Deploy no Streamlit Cloud falhava na instalação de dependências: `No interpreter found for Python 3.12.9 in managed installations or search path` | `.python-version` e `requires-python` fixavam o patch exato `3.12.9` (gravado automaticamente pelo `uv init`, não decisão deliberada); indisponível entre os interpretadores geridos pelo Streamlit Cloud | Relaxado para `3.12` (a série, não o patch) nos dois arquivos; `uv lock` regenerado — só a linha `requires-python` mudou, nenhuma dependência resolvida foi afetada |
+| 34 | `FileNotFoundError` ao iniciar o app publicado: seed de imóveis não encontrado | `DEFAULT_DB_PATH`/`SEED_PROPERTIES` (`persistence/database.py`, `core/config.py`) eram caminhos relativos ao diretório de trabalho do processo; o Streamlit Cloud executa a partir da raiz do repositório Git, não da subpasta do projeto | Caminhos ancorados em `Path(__file__).resolve().parent.parent.parent`, calculado a partir da localização do arquivo-fonte, não do processo. Validado simulando o processo iniciado em `/tmp`, fora da árvore do projeto |
+| 35 | Resposta da Sofia truncada em 3 caracteres ("Ent"), exibida quebrada ao lead, em produção | Não identificada com certeza — intermitente, não reproduzida numa segunda tentativa com a mesma entrada. Descartadas por inspeção de código: o bug do `$` duplicado (item 27) e a lógica de remoção de aspas de `_higienizar()` | Guarda defensiva: resposta do LLM com menos de 15 caracteres é tratada como falha, aciona o mesmo fallback determinístico já usado para erro de API |
 
 ---
 
@@ -307,6 +345,9 @@ no processo.
 | 44 | `qualification_agent.py` e `Orchestrator.diagnostico()` acessam `GroqClient._settings` diretamente (atributo privado) — encapsulamento incompleto; corrigido parcialmente na Etapa 7 (propriedades públicas do `Orchestrator` para leitura de repositórios), mas não para este caso, que exigiria alterar o `GroqClient` também | `agents/qualification_agent.py`, `agents/orchestrator.py` |
 | 45 | Uso de LLM exibido no dashboard (`GroqClient.stats`) é a contagem da sessão atual do processo Streamlit, em memória — não um histórico persistido; reinicia quando o servidor reinicia | `observability/metrics.py`, `llm/groq_client.py` |
 | 46 | Leads continuam sendo criados na abertura da conversa, gerando registros vazios se o usuário não interagir (limitação 17, inalterada) — o dashboard da Etapa 7 apenas oculta esses registros na exibição por padrão, não resolve a causa | `agents/orchestrator.py`, `ui/page_dashboard.py` |
+| 47 | Causa raiz não identificada para uma resposta do LLM implausivelmente curta observada uma vez em produção (item 35 dos Bugs); mitigada com guarda defensiva na Etapa 8, não resolvida na origem | `llm/groq_client.py`, `agents/conversation_agent.py` |
+| 48 | Nenhum teste automatizado cobre os caminhos padrão de banco/seed (`DEFAULT_DB_PATH`, `SEED_PROPERTIES`) a partir de um diretório de trabalho diferente da pasta do projeto — o bug de produção correspondente (item 34 dos Bugs) só foi encontrado no deploy real, não pela suíte | `persistence/database.py`, `core/config.py` |
+| 49 | Saída de emergência para intenção ambígua é regra determinística de código no motor demonstrativo, mas apenas instrução de prompt (sem garantia de código) no modo LLM — observado na validação da Etapa 8: com só duas respostas ambíguas, o modo LLM ainda insistiu perguntando a intenção | `llm/demo_engine.py`, `llm/prompts.py` |
 
 ---
 
@@ -323,3 +364,5 @@ no processo.
 **Validação manual concluída (Etapa 6):** conversa real na interface cobrindo os cenários 3.1 (compra e aluguel, ciclo completo) e 3.2 (investimento, ciclo completo), os três blocos de agendamento (horário interpretável, disponibilidade vaga com sugestões, não duplicação), e a correção do texto de encerramento nos dois caminhos (LLM e determinístico). Follow-up e resumo — que não têm nenhuma representação visual na tela ainda (pendência 37) — foram validados por script contra o banco de produção real (`scripts/validar_followup_producao.py`), não um banco isolado: ciclo completo de 1ª tentativa → 2ª tentativa → escalada → resumo automático, com `GroqClient` real. Cinco bugs reais foram encontrados e corrigidos nessa rodada (itens 26–30), nenhum deles detectável pelos testes automatizados por natureza (renderização visual, relógio real, encadeamento de duas falhas de LLM no mesmo turno). Métricas de latência/custo específicas da Etapa 6 não foram medidas com rigor numérico — o achado quantificável desta rodada foi a taxa de fallback do `model_fast`, registrada como observação (item 40), não como medição precisa.
 
 **Validação manual concluída (Etapa 7):** conversa real na interface (cenário 3.1, compra) do zero até 100% qualificado, com agendamento confirmado no último turno via LLM real, cobrindo: navegação entre as três páginas sem conflito visual com o painel de qualificação já existente; dashboard refletindo o lead recém-criado sem reload do navegador (mesma instância de `Orchestrator` da sessão, confirmada pelo número de chamadas ao LLM batendo entre as duas telas); painel do corretor com agenda, resumo automático (gatilho "agendamento confirmado") e botão de verificação de follow-up testado contra o banco de produção real (31 leads processados, 10 reengajados, 0 escalados); exibição de score/temperatura confirmada na barra lateral após identificar a necessidade de restart completo do servidor (ver seção 6g). **Nenhum bug de código foi encontrado nesta rodada** — o único incidente foi de processo (arquivos trocados ao colar conteúdo entre duas entregas, detalhado na seção 6g), resolvido sem alterar nenhuma lógica de negócio já validada.
+
+**Validação manual concluída (Etapa 8):** aplicação publicada no Streamlit Community Cloud, testada com chave de API real (`DEMO_MODE=false`), cobrindo os três cenários do enunciado (compra, aluguel, investimento) do zero até qualificação completa, agendamento com data e horário concretos confirmado pelo `SchedulingAgent`, painel do corretor (verificação de follow-up sem falso positivo, agenda, resumos gerados por LLM) e dashboard (funil, eventos, uso de LLM — 24 chamadas, 100% de sucesso, 941ms de latência média, 35.264 tokens). Recarregamento no meio de uma conversa (F5) confirmado como reinício limpo, sem erro. Três bugs reais foram encontrados e corrigidos só neste processo (itens 33–35 dos Bugs), nenhum detectável pela suíte automatizada por natureza (ambiente de execução, não lógica de código) — reforça que cobertura de teste não substitui validação no ambiente de deploy real.
