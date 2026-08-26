@@ -28,7 +28,7 @@
 | Projeto | CasaLead — Agente SDR Imobiliário com IA Generativa |
 | Aluno | Leonardo José de Oliveira Santos — RM369985 |
 | Curso | FIAP — Pós Tech em IA para Devs (Hackathon) |
-| Padrão de entrega | Mesmo do Tech Challenge Fase 4 (MedWatch): README robusto, relatório técnico em PDF, app publicada no Streamlit Cloud, sem vídeo |
+| Padrão de entrega quanto a README robusto, relatório técnico em PDF e app publicada. **Decisão revisada nesta etapa:** esta entrega incluirá vídeo de apresentação, gravado a partir do link em produção — diferente da Fase 4, que não teve vídeo por falta de recursos de hardware (desafio rodava só local, sem app publicada)
 
 ## 2. Ambiente confirmado
 
