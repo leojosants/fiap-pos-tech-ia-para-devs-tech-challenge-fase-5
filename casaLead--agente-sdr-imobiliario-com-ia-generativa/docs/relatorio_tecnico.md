@@ -4,6 +4,7 @@
 **Autor:** Leonardo José de Oliveira Santos (RM369985)
 **Repositório:** [github.com/leojosants/fiap-pos-tech-ia-para-devs-tech-challenge-fase-5](https://github.com/leojosants/fiap-pos-tech-ia-para-devs-tech-challenge-fase-5)
 **Aplicação (Streamlit Cloud):** [casalead-sdr-imobiliario-fase-5.streamlit.app](https://casalead-sdr-imobiliario-fase-5.streamlit.app/)
+**Vídeo de apresentação (15 min):** [youtu.be/Q3UpjTLiw9Y](https://youtu.be/Q3UpjTLiw9Y)
 
 ---
 
@@ -1262,7 +1263,7 @@ relevantes por tema.
 ### 17.2 Instalação
 
 ```bash
-git clone git@github.com:leojosants/fiap-pos-tech-ia-para-devs-tech-challenge-fase-5.git
+git clone https://github.com/leojosants/fiap-pos-tech-ia-para-devs-tech-challenge-fase-5.git
 cd fiap-pos-tech-ia-para-devs-tech-challenge-fase-5/casaLead--agente-sdr-imobiliario-com-ia-generativa
 uv sync
 ```
